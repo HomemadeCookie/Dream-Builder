@@ -4,6 +4,35 @@ import { Target, Clock, TrendingUp, CheckCircle2, Menu, X, Flame, Calendar, Wifi
 import { apiService } from '../services/api';
 
 const DreamBuilderDashboard = () => {
+  const isMobile = window.innerWidth < 768;
+  const timerAtBottom = true;
+  const timerShouldStick = isMobile && !timerAtBottom; 
+  // true = mobile layout puts timer at bottom
+  const timerCardStyle = {
+    gridColumn: isMobile ? 'span 1' : 'span 4',
+    gridRow: isMobile ? 'span 1' : 'span 2',
+
+    position: timerShouldStick ? 'sticky' : 'relative',
+    bottom: timerShouldStick ? '16px' : 'auto',
+
+    background: timerShouldStick
+      ? 'linear-gradient(to bottom right, #450a0a, #881337)'
+      : 'linear-gradient(to bottom right, rgba(220, 38, 38, 0.2), rgba(225, 29, 72, 0.2))',
+
+    border: timerShouldStick
+      ? '2px solid rgba(239, 68, 68, 0.9)'
+      : '1px solid rgba(220, 38, 38, 0.3)',
+
+    boxShadow: timerShouldStick
+      ? '0 12px 40px rgba(0,0,0,0.85)'
+      : 'none',
+
+    borderRadius: '24px',
+    padding: '24px',
+    zIndex: timerShouldStick ? 50 : 'auto'
+  };
+
+
   const [selectedField, setSelectedField] = useState('business');
   const [menuOpen, setMenuOpen] = useState(false);
   const [fields, setFields] = useState({});
@@ -236,7 +265,9 @@ const DreamBuilderDashboard = () => {
 
       {/* Slide-out Menu */}
       <div style={{
-        position: 'fixed', top: 0, left: 0, height: '100%', width: '320px', backgroundColor: '#0a0a0a',
+        position: 'fixed', top: 0, left: 0, height: '100%', width: isMobile ? '100%' : '320px',
+        backgroundColor: '#0a0a0a',
+        padding: isMobile ? '20px' : '16px',
         borderRight: '1px solid rgba(255, 255, 255, 0.1)', zIndex: 40,
         transform: menuOpen ? 'translateX(0)' : 'translateX(-100%)', transition: 'transform 0.3s',
         overflowY: 'auto'
@@ -251,7 +282,10 @@ const DreamBuilderDashboard = () => {
           </h2>
           <p style={{ color: '#6b7280', fontSize: '14px', marginBottom: '32px' }}>Track your progress</p>
           
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row',
+            top: isMobile ? '12px' : '24px',
+            right: isMobile ? '12px' : '24px',
+            gap: '8px' }}>
             {Object.values(fields).map((field) => (
               <button
                 key={field.id}
@@ -292,21 +326,29 @@ const DreamBuilderDashboard = () => {
               <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '12px' }}>
                 <div style={{ fontSize: '48px' }}>{currentField.icon}</div>
                 <div>
-                  <h1 style={{ fontSize: '36px', fontWeight: 'bold' }}>{currentField.name}</h1>
+                  <h1 style={{ fontSize: isMobile ? '24px':'36px', fontWeight: 'bold' }}>{currentField.name}</h1>
                   <p style={{ color: '#6b7280' }}>{currentField.goal}</p>
                 </div>
               </div>
             </div>
 
             {/* Bento Grid */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', gap: '16px', gridAutoRows: '140px' }}>
+            <div style={{ 
+                display: 'grid',
+                gridTemplateColumns: isMobile ? '1fr' : 'repeat(12, 1fr)',
+                gap: isMobile ? '12px' : '16px',
+                gridAutoRows: isMobile ? 'auto' : '140px'
+              }}>
               {/* Progress Card */}
               <div style={{
-                gridColumn: 'span 4', gridRow: 'span 2', backgroundColor: '#1a1a1a',
+                gridColumn: isMobile ? 'span 1' : 'span 4', gridRow: isMobile ? 'span 1' : 'span 2', backgroundColor: '#1a1a1a',
                 border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '24px', padding: '24px',
                 position: 'relative', overflow: 'hidden'
               }}>
-                <div style={{ position: 'relative', zIndex: 10, height: '100%', display: 'flex', flexDirection: 'column' }}>
+                <div style={{ position: 'relative', zIndex: 10, height: '100%', display: 'flex', flexDirection: isMobile ? 'column' : 'row',
+                  top: isMobile ? '12px' : '24px',
+                  right: isMobile ? '12px' : '24px',
+                  }}>
                   <div style={{ color: '#9ca3af', fontSize: '14px', marginBottom: '8px' }}>Overall Progress</div>
                   <div style={{ fontSize: '72px', fontWeight: 'bold', marginBottom: '16px' }}>{currentField.progress}%</div>
                   <div style={{ marginTop: 'auto' }}>
@@ -343,7 +385,7 @@ const DreamBuilderDashboard = () => {
               </div>
 
               {/* Stats Cards */}
-              <div style={{ gridColumn: 'span 2', backgroundColor: '#1a1a1a', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '16px', padding: '16px' }}>
+              <div style={{ gridColumn: isMobile ? 'span 1':'span 2', backgroundColor: '#1a1a1a', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '16px', padding: '16px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
                   <Clock size={16} color="#dc2626" />
                   <div style={{ color: '#6b7280', fontSize: '12px' }}>Time</div>
@@ -352,19 +394,27 @@ const DreamBuilderDashboard = () => {
               </div>
 
               {/* Timer Card - Spans 2 rows */}
-              <div style={{
-                gridColumn: 'span 4', gridRow: 'span 2',
-                background: 'linear-gradient(to bottom right, rgba(220, 38, 38, 0.2), rgba(225, 29, 72, 0.2))',
-                border: '1px solid rgba(220, 38, 38, 0.3)', borderRadius: '24px', padding: '24px',
-                display: 'flex', flexDirection: 'column', gap: '16px'
-              }}>
+              <div style={
+                // gridColumn: isMobile ? 'span 1' : 'span 4', gridRow: isMobile ? 'span 1' : 'span 2',
+                // background: 'linear-gradient(to bottom right, rgba(220, 38, 38, 0.2), rgba(225, 29, 72, 0.2))',
+                // border: '1px solid rgba(220, 38, 38, 0.3)', borderRadius: '24px', padding: '24px',
+                // display: 'flex', flexDirection: isMobile ? 'column' : 'row',
+                // top: isMobile ? '12px' : '24px',
+                // right: isMobile ? '12px' : '24px',
+                // gap: '16px',
+                // position: isMobile ? 'sticky' : 'relative',
+                // bottom: isMobile ? '12px' : 'auto',
+                // zIndex: 20,
+                timerCardStyle
+
+              }>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <Clock size={20} color="#fca5a5" />
                   <div style={{ color: '#9ca3af', fontSize: '14px' }}>Time Tracker</div>
                 </div>
                 
                 <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', gap: '16px' }}>
-                  <div style={{ fontSize: '48px', fontWeight: 'bold', fontFamily: 'monospace', letterSpacing: '4px' }}>
+                  <div style={{ fontSize: isMobile ? '32px' : '48px', fontWeight: 'bold', fontFamily: 'monospace', letterSpacing: '4px' }}>
                     {formatTimerDisplay()}
                   </div>
                   
@@ -372,7 +422,14 @@ const DreamBuilderDashboard = () => {
                     Accumulated: {getAccumulatedDisplay()}h (increments per hour)
                   </div>
                   
-                  <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
+                  <div style={{ 
+                    display: 'flex', 
+                    gap: '12px',
+                    marginTop: '8px',
+                    flexDirection: isMobile ? 'column' : 'row',
+                    width: '100%'
+                  }}>
+
                     {!timerRunning ? (
                       <button
                         onClick={startTimer}
@@ -381,7 +438,9 @@ const DreamBuilderDashboard = () => {
                           padding: '12px 24px',
                           background: 'linear-gradient(to right, #22c55e, #16a34a)',
                           border: 'none', borderRadius: '12px',
-                          color: '#fff', cursor: 'pointer', fontSize: '16px', fontWeight: 600
+                          color: '#fff', cursor: 'pointer', fontSize: '16px', fontWeight: 600,
+                          width: isMobile ? '100%' : 'auto'
+
                         }}
                       >
                         <Play size={20} />
@@ -395,7 +454,9 @@ const DreamBuilderDashboard = () => {
                           padding: '12px 24px',
                           background: 'linear-gradient(to right, #eab308, #ca8a04)',
                           border: 'none', borderRadius: '12px',
-                          color: '#fff', cursor: 'pointer', fontSize: '16px', fontWeight: 600
+                          color: '#fff', cursor: 'pointer', fontSize: '16px', fontWeight: 600,
+                          width: isMobile ? '100%' : 'auto'
+
                         }}
                       >
                         <Pause size={20} />
@@ -413,7 +474,9 @@ const DreamBuilderDashboard = () => {
                         border: 'none', borderRadius: '12px',
                         color: '#fff', cursor: timerSeconds === 0 ? 'not-allowed' : 'pointer',
                         fontSize: '16px', fontWeight: 600,
-                        opacity: timerSeconds === 0 ? 0.5 : 1
+                        opacity: timerSeconds === 0 ? 0.5 : 1,
+                        width: isMobile ? '100%' : 'auto'
+
                       }}
                     >
                       <Square size={20} />
@@ -423,7 +486,7 @@ const DreamBuilderDashboard = () => {
                 </div>
               </div>
 
-              <div style={{ gridColumn: 'span 2', backgroundColor: '#1a1a1a', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '16px', padding: '16px' }}>
+              <div style={{ gridColumn: isMobile ? 'span 1' : 'span 2', backgroundColor: '#1a1a1a', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '16px', padding: '16px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
                   <CheckCircle2 size={16} color="#dc2626" />
                   <div style={{ color: '#6b7280', fontSize: '12px' }}>Done</div>
@@ -431,7 +494,7 @@ const DreamBuilderDashboard = () => {
                 <div style={{ fontSize: '28px', fontWeight: 'bold' }}>{currentField.milestones}</div>
               </div>
 
-              <div style={{ gridColumn: 'span 2', backgroundColor: '#1a1a1a', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '16px', padding: '16px' }}>
+              <div style={{ gridColumn: isMobile ? 'span 1' : 'span 2', backgroundColor: '#1a1a1a', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '16px', padding: '16px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
                   <Flame size={16} color="#dc2626" />
                   <div style={{ color: '#6b7280', fontSize: '12px' }}>Streak</div>
@@ -439,7 +502,7 @@ const DreamBuilderDashboard = () => {
                 <div style={{ fontSize: '28px', fontWeight: 'bold' }}>{currentField.streak}</div>
               </div>
 
-              <div style={{ gridColumn: 'span 2', backgroundColor: '#1a1a1a', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '16px', padding: '16px' }}>
+              <div style={{ gridColumn: isMobile ? 'span 1' : 'span 2', backgroundColor: '#1a1a1a', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '16px', padding: '16px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
                   <Calendar size={16} color="#dc2626" />
                   <div style={{ color: '#6b7280', fontSize: '12px' }}>Week</div>
@@ -449,7 +512,7 @@ const DreamBuilderDashboard = () => {
 
               {/* Goal Card - Moved to accommodate timer */}
               <div style={{
-                gridColumn: 'span 4', gridRow: 'span 1',
+                gridColumn: isMobile ? 'span 1' : 'span 4', gridRow: isMobile ? 'span 1' : 'span 1',
                 background: 'linear-gradient(to bottom right, rgba(220, 38, 38, 0.15), rgba(225, 29, 72, 0.15))',
                 border: '1px solid rgba(220, 38, 38, 0.3)', borderRadius: '24px', padding: '24px'
               }}>
@@ -461,12 +524,14 @@ const DreamBuilderDashboard = () => {
               </div>
 
               {/* Next Steps */}
-              <div style={{ gridColumn: 'span 8', gridRow: 'span 3', backgroundColor: '#1a1a1a', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '24px', padding: '24px' }}>
+              <div style={{ gridColumn: isMobile ? 'span 1':'span 8', gridRow: isMobile ? 'span 1' : 'span 3', backgroundColor: '#1a1a1a', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '24px', padding: '24px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
                   <TrendingUp size={20} color="#fca5a5" />
                   <h3 style={{ fontSize: '20px', fontWeight: 600 }}>Next Steps</h3>
                 </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: '340px', overflowY: 'auto' }}>
+                <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row',
+                top: isMobile ? '12px' : '24px',
+                right: isMobile ? '12px' : '24px', gap: '12px', maxHeight: '340px', overflowY: 'auto' }}>
                   {currentField.nextSteps && currentField.nextSteps.length > 0 ? (
                     currentField.nextSteps.map((step, idx) => (
                       <div key={idx} style={{
