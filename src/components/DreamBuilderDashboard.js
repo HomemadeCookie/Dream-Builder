@@ -2,6 +2,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Target, Clock, TrendingUp, CheckCircle2, Menu, X, Flame, Calendar, Wifi, WifiOff, RefreshCw, Play, Pause, Square } from 'lucide-react';
 import { apiService } from '../services/api';
+import EditableText from "./EditableText";
+
 
 const DreamBuilderDashboard = () => {
   const isMobile = window.innerWidth < 768;
@@ -31,6 +33,38 @@ const DreamBuilderDashboard = () => {
     padding: '24px',
     zIndex: timerShouldStick ? 50 : 'auto'
   };
+
+  const [currentGoal, setCurrentGoal] = useState("Make a $1,000,000");
+
+  const updateGoal = (index, newValue) => {
+    const updated = [...goals];
+    updated[index] = newValue;
+    setGoals(updated);
+  };
+
+  const [nextSteps, setNextSteps] = useState([
+    "Get resort client",
+    "Find business thesis idea"
+  ]);
+
+  const updateNextStep = (index, newValue) => {
+    setNextSteps(prev => {
+      const updated = [...prev];
+      updated[index] = newValue;
+      return updated;
+    });
+  };
+
+  const addNextStep = () => {
+    setNextSteps(prev => [...prev, "New Step"]);
+    // If you want to update the field in the database immediately:
+    // apiService.updateField(selectedField, { nextSteps: [...nextSteps, "New Step"] });
+  };
+
+  const deleteNextStep = (indexToDelete) => {
+    setNextSteps(prev => prev.filter((_, idx) => idx !== indexToDelete));
+  };
+
 
 
   const [selectedField, setSelectedField] = useState('business');
@@ -394,20 +428,7 @@ const DreamBuilderDashboard = () => {
               </div>
 
               {/* Timer Card - Spans 2 rows */}
-              <div style={
-                // gridColumn: isMobile ? 'span 1' : 'span 4', gridRow: isMobile ? 'span 1' : 'span 2',
-                // background: 'linear-gradient(to bottom right, rgba(220, 38, 38, 0.2), rgba(225, 29, 72, 0.2))',
-                // border: '1px solid rgba(220, 38, 38, 0.3)', borderRadius: '24px', padding: '24px',
-                // display: 'flex', flexDirection: isMobile ? 'column' : 'row',
-                // top: isMobile ? '12px' : '24px',
-                // right: isMobile ? '12px' : '24px',
-                // gap: '16px',
-                // position: isMobile ? 'sticky' : 'relative',
-                // bottom: isMobile ? '12px' : 'auto',
-                // zIndex: 20,
-                timerCardStyle
-
-              }>
+              <div style={timerCardStyle}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <Clock size={20} color="#fca5a5" />
                   <div style={{ color: '#9ca3af', fontSize: '14px' }}>Time Tracker</div>
@@ -520,40 +541,101 @@ const DreamBuilderDashboard = () => {
                   <Target size={20} color="#fca5a5" />
                   <div style={{ color: '#9ca3af', fontSize: '14px' }}>Current Goal</div>
                 </div>
-                <div style={{ fontSize: '20px', fontWeight: 'bold' }}>{currentField.goal}</div>
+                <EditableText
+                  value={currentGoal}
+                  onSave={(newValue) => setCurrentGoal(newValue)}
+                />
+
+
               </div>
 
               {/* Next Steps */}
-              <div style={{ gridColumn: isMobile ? 'span 1':'span 8', gridRow: isMobile ? 'span 1' : 'span 3', backgroundColor: '#1a1a1a', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '24px', padding: '24px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '16px' }}>
-                  <TrendingUp size={20} color="#fca5a5" />
-                  <h3 style={{ fontSize: '20px', fontWeight: 600 }}>Next Steps</h3>
+              <div style={{ 
+                gridColumn: isMobile ? 'span 1' : 'span 8', 
+                gridRow: isMobile ? 'span 1' : 'span 3', 
+                backgroundColor: '#1a1a1a', 
+                border: '1px solid rgba(255, 255, 255, 0.1)', 
+                borderRadius: '24px', 
+                padding: '24px',
+                display: 'flex',
+                flexDirection: 'column'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <TrendingUp size={20} color="#fca5a5" />
+                    <h3 style={{ fontSize: '20px', fontWeight: 600 }}>Next Steps</h3>
+                  </div>
+                  
+                  {/* Add Button */}
+                  <button
+                    onClick={addNextStep}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: '4px',
+                      padding: '6px 12px', backgroundColor: 'rgba(34, 197, 94, 0.2)',
+                      border: '1px solid rgba(34, 197, 94, 0.3)', borderRadius: '8px',
+                      color: '#4ade80', cursor: 'pointer', fontSize: '13px'
+                    }}
+                  >
+                    <Play size={14} style={{ transform: 'rotate(-90deg)' }} /> {/* Using Play as a makeshift plus or import Plus from lucide-react */}
+                    Add Step
+                  </button>
                 </div>
-                <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row',
-                top: isMobile ? '12px' : '24px',
-                right: isMobile ? '12px' : '24px', gap: '12px', maxHeight: '340px', overflowY: 'auto' }}>
-                  {currentField.nextSteps && currentField.nextSteps.length > 0 ? (
-                    currentField.nextSteps.map((step, idx) => (
-                      <div key={idx} style={{
-                        display: 'flex', alignItems: 'flex-start', gap: '12px',
-                        backgroundColor: 'rgba(255, 255, 255, 0.05)', borderRadius: '12px', padding: '16px'
+
+                <div style={{ 
+                  display: 'flex', 
+                  flexDirection: 'column',
+                  gap: '12px', 
+                  maxHeight: '340px', 
+                  overflowY: 'auto',
+                  paddingRight: '4px' 
+                }}>
+                  {nextSteps.map((step, idx) => (
+                    <div key={idx} style={{
+                      display: 'flex', alignItems: 'center', gap: '12px',
+                      backgroundColor: 'rgba(255, 255, 255, 0.05)', borderRadius: '12px', padding: '12px 16px',
+                      group: 'true' // Logical flag for hover effects
+                    }}>
+                      <div style={{
+                        width: '24px', height: '24px', borderRadius: '6px',
+                        backgroundColor: 'rgba(220, 38, 38, 0.2)', border: '1px solid rgba(220, 38, 38, 0.3)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontSize: '12px', fontWeight: 'bold', flexShrink: 0
                       }}>
-                        <div style={{
-                          width: '24px', height: '24px', borderRadius: '6px',
-                          backgroundColor: 'rgba(220, 38, 38, 0.2)', border: '1px solid rgba(220, 38, 38, 0.3)',
-                          display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          fontSize: '12px', fontWeight: 'bold', flexShrink: 0
-                        }}>
-                          {idx + 1}
-                        </div>
-                        <span style={{ color: '#d1d5db', flex: 1 }}>
-                          {typeof step === 'string' ? step : step.text}
-                        </span>
+                        {idx + 1}
                       </div>
-                    ))
-                  ) : (
+                      
+                      <div style={{ flex: 1 }}>
+                        <EditableText
+                          value={step}
+                          onSave={(newValue) => updateNextStep(idx, newValue)}
+                        />
+                      </div>
+
+                      {/* Delete Button */}
+                      <button
+                        onClick={() => deleteNextStep(idx)}
+                        style={{
+                          padding: '8px',
+                          backgroundColor: 'transparent',
+                          border: 'none',
+                          color: '#6b7280',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          transition: 'color 0.2s'
+                        }}
+                        onMouseEnter={(e) => e.currentTarget.style.color = '#ef4444'}
+                        onMouseLeave={(e) => e.currentTarget.style.color = '#6b7280'}
+                      >
+                        <X size={18} />
+                      </button>
+                    </div>
+                  ))}
+
+                  {nextSteps.length === 0 && (
                     <div style={{ color: '#6b7280', textAlign: 'center', padding: '32px' }}>
-                      No next steps yet
+                      No next steps yet. Click add to begin.
                     </div>
                   )}
                 </div>

@@ -165,8 +165,8 @@ class Database {
         timeSpent: 0,
         goal: 'Launch MVP by Q2',
         nextSteps: [
-          'Finalize business model',
-          'Set up legal structure',
+          'Get Resort Client',
+          'Finalize Thesis Idea',
           'Build landing page',
           'Reach out to first 10 customers'
         ],
@@ -182,8 +182,8 @@ class Database {
         timeSpent: 0,
         goal: 'Master full-stack development',
         nextSteps: [
-          'Complete React advanced patterns',
-          'Build 3 portfolio projects',
+          'Develop Fullstack App',
+          'Find Full-time Gig',
           'Learn system design',
           'Master TypeScript'
         ],
