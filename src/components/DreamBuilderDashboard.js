@@ -1,34 +1,246 @@
-// src/components/DreamBuilderDashboard.js
 import React, { useState, useEffect, useRef } from 'react';
 import { Target, Clock, TrendingUp, CheckCircle2, Menu, X, Flame, Calendar, Wifi, WifiOff, RefreshCw, Play, Pause, Square } from 'lucide-react';
-import { apiService } from '../services/api';
-import EditableText from "./EditableText";
 
+// Add these helper functions near the top of your component
+const saveTimerState = (seconds, accumulated, running) => {
+  localStorage.setItem('timerState', JSON.stringify({
+    seconds,
+    accumulated,
+    running,
+    timestamp: Date.now()
+  }));
+};
+
+const loadTimerState = () => {
+  const saved = localStorage.getItem('timerState');
+  if (saved) {
+    const state = JSON.parse(saved);
+    // If timer was running when page closed, calculate elapsed time
+    if (state.running) {
+      const elapsed = Math.floor((Date.now() - state.timestamp) / 1000);
+      return {
+        seconds: state.seconds + elapsed,
+        accumulated: state.accumulated,
+        running: true
+      };
+    }
+    return state;
+  }
+  return null;
+};
+
+const apiService = {
+  initialize: async () => {
+    // Load from localStorage if exists
+    const stored = localStorage.getItem('dreamBuilderData');
+    if (!stored) {
+      // Initialize with default data
+      const defaultData = {
+        business: {
+          id: 'business',
+          name: 'Business',
+          icon: '💼',
+          goal: 'Make a $1,000,000',
+          progress: 25,
+          timeSpent: 120,
+          milestones: 5,
+          streak: 12,
+          nextSteps: ['Get resort client', 'Find business thesis idea']
+        },
+        tech: {
+            id: 'tech',
+            name: 'Tech',
+            icon: '⚡',
+            progress: 0,
+            timeSpent: 0,
+            goal: 'Master full-stack development',
+            nextSteps: [
+              'Develop Fullstack App',
+              'Find Full-time Gig',
+              'Learn system design',
+              'Master TypeScript'
+            ],
+            milestones: 0,
+            streak: 0,
+            synced: true
+        },
+        physical: {
+            id: 'physical',
+            name: 'Physical',
+            icon: '💪',
+            progress: 0,
+            timeSpent: 0,
+            goal: 'Run a half marathon',
+            nextSteps: [
+              'Increase weekly mileage to 30km',
+              'Add strength training 2x/week',
+              'Join running club',
+              'Focus on nutrition'
+            ],
+            milestones: 0,
+            streak: 0,
+            synced: true
+        },
+        social: {
+            id: 'social',
+            name: 'Social',
+            icon: '🤝',
+            progress: 0,
+            timeSpent: 0,
+            goal: 'Build meaningful connections',
+            nextSteps: [
+              'Attend 2 networking events/month',
+              'Schedule coffee chats weekly',
+              'Join community group',
+              'Host a small gathering'
+            ],
+            milestones: 0,
+            streak: 0,
+            synced: true
+        },
+        misc: {
+            id: 'misc',
+            name: 'Misc',
+            icon: '✨',
+            progress: 0,
+            timeSpent: 0,
+            goal: 'Creative expression & hobbies',
+            nextSteps: [
+              'Practice guitar 3x/week',
+              'Start photography course',
+              'Read 2 books/month',
+              'Write in journal daily'
+            ],
+            milestones: 0,
+            streak: 0,
+            synced: true
+        }
+      };
+      localStorage.setItem('dreamBuilderData', JSON.stringify(defaultData));
+    }
+  },
+  
+  fetchFields: async () => {
+    const stored = localStorage.getItem('dreamBuilderData');
+    return stored ? JSON.parse(stored) : {};
+  },
+  
+  updateProgress: async (fieldId, newProgress) => {
+    const data = JSON.parse(localStorage.getItem('dreamBuilderData'));
+    data[fieldId].progress = newProgress;
+    localStorage.setItem('dreamBuilderData', JSON.stringify(data));
+  },
+  
+  updateGoal: async (fieldId, newGoal) => {
+    const data = JSON.parse(localStorage.getItem('dreamBuilderData'));
+    data[fieldId].goal = newGoal;
+    localStorage.setItem('dreamBuilderData', JSON.stringify(data));
+  },
+  
+  updateNextSteps: async (fieldId, nextSteps) => {
+    const data = JSON.parse(localStorage.getItem('dreamBuilderData'));
+    data[fieldId].nextSteps = nextSteps;
+    localStorage.setItem('dreamBuilderData', JSON.stringify(data));
+  },
+  
+  addNextStep: async (fieldId, step) => {
+    const data = JSON.parse(localStorage.getItem('dreamBuilderData'));
+    data[fieldId].nextSteps.push(step);
+    localStorage.setItem('dreamBuilderData', JSON.stringify(data));
+  },
+  
+  addTimeSpent: async (fieldId, hours) => {
+    const data = JSON.parse(localStorage.getItem('dreamBuilderData'));
+    data[fieldId].timeSpent += hours;
+    localStorage.setItem('dreamBuilderData', JSON.stringify(data));
+  },
+
+  // Add these to your apiService object
+  updateStreak: async (fieldId, newStreak) => {
+    const data = JSON.parse(localStorage.getItem('dreamBuilderData'));
+    data[fieldId].streak = newStreak;
+    localStorage.setItem('dreamBuilderData', JSON.stringify(data));
+  },
+
+  updateMilestones: async (fieldId, newMilestones) => {
+    const data = JSON.parse(localStorage.getItem('dreamBuilderData'));
+    data[fieldId].milestones = newMilestones;
+    localStorage.setItem('dreamBuilderData', JSON.stringify(data));
+  },
+  
+  getUnsyncedCount: async () => 0,
+  syncOfflineData: async () => {}
+};
+
+const EditableText = ({ value, onSave }) => {
+  const [isEditing, setIsEditing] = useState(false);
+  const [text, setText] = useState(value);
+
+  useEffect(() => {
+    setText(value);
+  }, [value]);
+
+  const handleSave = () => {
+    setIsEditing(false);
+    if (text !== value) {
+      onSave(text);
+    }
+  };
+
+  if (isEditing) {
+    return (
+      <input
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        onBlur={handleSave}
+        onKeyPress={(e) => e.key === 'Enter' && handleSave()}
+        autoFocus
+        style={{
+          width: '100%',
+          background: 'transparent',
+          border: 'none',
+          color: '#fff',
+          fontSize: '20px',
+          fontWeight: 600,
+          outline: 'none'
+        }}
+      />
+    );
+  }
+
+  return (
+    <div
+      onClick={() => setIsEditing(true)}
+      style={{
+        cursor: 'pointer',
+        fontSize: '20px',
+        fontWeight: 600
+      }}
+    >
+      {value}
+    </div>
+  );
+};
 
 const DreamBuilderDashboard = () => {
   const isMobile = window.innerWidth < 768;
   const timerAtBottom = true;
   const timerShouldStick = isMobile && !timerAtBottom; 
-  // true = mobile layout puts timer at bottom
+  
   const timerCardStyle = {
     gridColumn: isMobile ? 'span 1' : 'span 4',
     gridRow: isMobile ? 'span 1' : 'span 2',
-
     position: timerShouldStick ? 'sticky' : 'relative',
     bottom: timerShouldStick ? '16px' : 'auto',
-
     background: timerShouldStick
       ? 'linear-gradient(to bottom right, #450a0a, #881337)'
       : 'linear-gradient(to bottom right, rgba(220, 38, 38, 0.2), rgba(225, 29, 72, 0.2))',
-
     border: timerShouldStick
       ? '2px solid rgba(239, 68, 68, 0.9)'
       : '1px solid rgba(220, 38, 38, 0.3)',
-
     boxShadow: timerShouldStick
       ? '0 12px 40px rgba(0,0,0,0.85)'
       : 'none',
-
     borderRadius: '24px',
     padding: '24px',
     zIndex: timerShouldStick ? 50 : 'auto'
@@ -36,36 +248,48 @@ const DreamBuilderDashboard = () => {
 
   const [currentGoal, setCurrentGoal] = useState("Make a $1,000,000");
 
-  const updateGoal = (index, newValue) => {
-    const updated = [...goals];
-    updated[index] = newValue;
-    setGoals(updated);
-  };
-
   const [nextSteps, setNextSteps] = useState([
     "Get resort client",
     "Find business thesis idea"
   ]);
 
-  const updateNextStep = (index, newValue) => {
+  const updateNextStep = async (index, newValue) => {
     setNextSteps(prev => {
       const updated = [...prev];
       updated[index] = newValue;
       return updated;
     });
+    // Add this to persist the change
+    try {
+      await apiService.updateNextSteps(selectedField, nextSteps.map((step, idx) => 
+        idx === index ? newValue : step
+      ));
+    } catch (error) {
+      console.error('Error updating next step:', error);
+    }
   };
 
-  const addNextStep = () => {
-    setNextSteps(prev => [...prev, "New Step"]);
-    // If you want to update the field in the database immediately:
-    // apiService.updateField(selectedField, { nextSteps: [...nextSteps, "New Step"] });
+  const addNextStep = async () => {
+    const newStep = "New Step";
+    setNextSteps(prev => [...prev, newStep]);
+    try {
+      await apiService.addNextStep(selectedField, newStep);
+      await loadFields();
+    } catch (error) {
+      console.error('Error adding next step:', error);
+    }
   };
 
-  const deleteNextStep = (indexToDelete) => {
-    setNextSteps(prev => prev.filter((_, idx) => idx !== indexToDelete));
+  const deleteNextStep = async (indexToDelete) => {
+    const updatedSteps = nextSteps.filter((_, idx) => idx !== indexToDelete);
+    setNextSteps(updatedSteps);
+    // Add this to persist the change
+    try {
+      await apiService.updateNextSteps(selectedField, updatedSteps);
+    } catch (error) {
+      console.error('Error deleting next step:', error);
+    }
   };
-
-
 
   const [selectedField, setSelectedField] = useState('business');
   const [menuOpen, setMenuOpen] = useState(false);
@@ -74,36 +298,7 @@ const DreamBuilderDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [unsyncedCount, setUnsyncedCount] = useState(0);
   const [syncing, setSyncing] = useState(false);
-  const [timerRunning, setTimerRunning] = useState(false);
-  const [timerSeconds, setTimerSeconds] = useState(0);
-  const [accumulatedHours, setAccumulatedHours] = useState(0);
-  const timerIntervalRef = useRef(null);
 
-  useEffect(() => {
-    initializeApp();
-    
-    // Listen for online/offline events
-    const handleOnline = () => {
-      setIsOnline(true);
-      syncData();
-    };
-    const handleOffline = () => setIsOnline(false);
-    
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
-    
-    // Check for unsynced data periodically
-    const syncInterval = setInterval(checkUnsyncedData, 10000);
-    
-    return () => {
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
-      clearInterval(syncInterval);
-      if (timerIntervalRef.current) {
-        clearInterval(timerIntervalRef.current);
-      }
-    };
-  }, []);
 
   const initializeApp = async () => {
     try {
@@ -149,6 +344,85 @@ const DreamBuilderDashboard = () => {
     }
   };
 
+
+  // For Next Steps
+
+  // Add these new state variables
+  const [checkedSteps, setCheckedSteps] = useState({}); // { stepIndex: { checked: true, date: '2024-12-28' } }
+  const [lastCheckDate, setLastCheckDate] = useState(null);
+  const [todayCompletedCount, setTodayCompletedCount] = useState(0);
+
+  // Add these storage functions with your other apiService methods
+  const stepStorageService = {
+    saveCheckedSteps: (fieldId, steps) => {
+      const allSteps = JSON.parse(localStorage.getItem('checkedSteps') || '{}');
+      allSteps[fieldId] = steps;
+      localStorage.setItem('checkedSteps', JSON.stringify(allSteps));
+    },
+    
+    loadCheckedSteps: (fieldId) => {
+      const allSteps = JSON.parse(localStorage.getItem('checkedSteps') || '{}');
+      return allSteps[fieldId] || {};
+    },
+    
+    saveLastCheckDate: (fieldId, date) => {
+      const dates = JSON.parse(localStorage.getItem('lastCheckDates') || '{}');
+      dates[fieldId] = date;
+      localStorage.setItem('lastCheckDates', JSON.stringify(dates));
+    },
+    
+    loadLastCheckDate: (fieldId) => {
+      const dates = JSON.parse(localStorage.getItem('lastCheckDates') || '{}');
+      return dates[fieldId] || null;
+    }
+  };
+
+  // Add this helper function to get today's date string
+  const getTodayString = () => {
+    return new Date().toISOString().split('T')[0];
+  };
+
+
+
+
+
+  useEffect(() => {
+    const handleOnline = () => {
+      setIsOnline(true);
+      syncData();
+    };
+    const handleOffline = () => setIsOnline(false);
+    
+    initializeApp();
+    
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    
+    const syncInterval = setInterval(checkUnsyncedData, 10000);
+    
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+      clearInterval(syncInterval);
+      if (timerIntervalRef.current) {
+        clearInterval(timerIntervalRef.current);
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const currentField = fields[selectedField];
+
+
+  // Timer
+
+  useEffect(() => {
+    if (currentField) {
+      setCurrentGoal(currentField.goal || "");
+      setNextSteps(currentField.nextSteps || []);
+    }
+  }, [selectedField, fields, currentField]);
+
   const updateProgress = async (fieldId, newProgress) => {
     try {
       await apiService.updateProgress(fieldId, newProgress);
@@ -159,51 +433,122 @@ const DreamBuilderDashboard = () => {
     }
   };
 
-  const startTimer = () => {
-    setTimerRunning(true);
-    timerIntervalRef.current = setInterval(() => {
-      setTimerSeconds(prev => prev + 1);
-    }, 1000);
+    // Timer state - stores ALL field timers
+  const [fieldTimers, setFieldTimers] = useState({}); // { fieldId: { seconds, accumulated, running } }
+  const timerIntervalRef = useRef(null);
+
+  // Get current field's timer or default
+  const currentTimer = fieldTimers[selectedField] || { seconds: 0, accumulated: 0, running: false };
+
+  // Start timer for current field
+  const startTimer = async () => {
+    // Stop any other running timers
+    const runningField = Object.keys(fieldTimers).find(
+      fieldId => fieldTimers[fieldId]?.running && fieldId !== selectedField
+    );
+    
+    if (runningField) {
+      await stopTimerForField(runningField);
+    }
+    
+    // Start timer for current field
+    setFieldTimers(prev => ({
+      ...prev,
+      [selectedField]: {
+        ...currentTimer,
+        running: true
+      }
+    }));
+    
+    saveTimerState(selectedField, currentTimer.seconds, currentTimer.accumulated, true);
+    
+    // Start interval
+    if (!timerIntervalRef.current) {
+      timerIntervalRef.current = setInterval(() => {
+        setFieldTimers(prev => {
+          const newTimers = { ...prev };
+          // Find and update the running timer
+          Object.keys(newTimers).forEach(fieldId => {
+            if (newTimers[fieldId]?.running) {
+              newTimers[fieldId] = {
+                ...newTimers[fieldId],
+                seconds: newTimers[fieldId].seconds + 1
+              };
+              saveTimerState(fieldId, newTimers[fieldId].seconds, newTimers[fieldId].accumulated, true);
+            }
+          });
+          return newTimers;
+        });
+      }, 1000);
+    }
   };
 
   const pauseTimer = () => {
-    setTimerRunning(false);
-    if (timerIntervalRef.current) {
+    setFieldTimers(prev => ({
+      ...prev,
+      [selectedField]: {
+        ...currentTimer,
+        running: false
+      }
+    }));
+    
+    saveTimerState(selectedField, currentTimer.seconds, currentTimer.accumulated, false);
+  };
+
+  const stopTimerForField = async (fieldId) => {
+    const timer = fieldTimers[fieldId];
+    if (!timer) return;
+    
+    const currentSessionHours = timer.seconds / 3600;
+    const totalHours = timer.accumulated + currentSessionHours;
+    
+    if (totalHours >= 1) {
+      const hoursToAdd = Math.floor(totalHours);
+      try {
+        await apiService.addTimeSpent(fieldId, hoursToAdd);
+        await loadFields();
+        
+        const remainingHours = totalHours - hoursToAdd;
+        
+        setFieldTimers(prev => ({
+          ...prev,
+          [fieldId]: {
+            seconds: 0,
+            accumulated: remainingHours,
+            running: false
+          }
+        }));
+        
+        saveTimerState(fieldId, 0, remainingHours, false);
+      } catch (error) {
+        console.error('Error updating time spent:', error);
+      }
+    } else {
+      setFieldTimers(prev => ({
+        ...prev,
+        [fieldId]: {
+          ...timer,
+          running: false
+        }
+      }));
+      
+      saveTimerState(fieldId, timer.seconds, timer.accumulated, false);
+    }
+    
+    // Clear interval if no timers running
+    const hasRunningTimer = Object.values(fieldTimers).some(t => t?.running && t !== timer);
+    if (!hasRunningTimer && timerIntervalRef.current) {
       clearInterval(timerIntervalRef.current);
       timerIntervalRef.current = null;
     }
   };
 
   const stopTimer = async () => {
-    pauseTimer();
-    
-    // Calculate total hours (including accumulated + current session)
-    const currentSessionHours = timerSeconds / 3600;
-    const totalHours = accumulatedHours + currentSessionHours;
-    
-    // Only increment if we have at least 1 hour
-    if (totalHours >= 1) {
-      const hoursToAdd = Math.floor(totalHours);
-      try {
-        await apiService.addTimeSpent(selectedField, hoursToAdd);
-        await loadFields();
-        await checkUnsyncedData();
-        
-        // Keep the fractional hours for next session
-        setAccumulatedHours(totalHours - hoursToAdd);
-      } catch (error) {
-        console.error('Error updating time spent:', error);
-      }
-    } else {
-      // Save accumulated time for next session
-      setAccumulatedHours(totalHours);
-    }
-    
-    setTimerSeconds(0);
+    await stopTimerForField(selectedField);
   };
 
   const formatTimerDisplay = () => {
-    const totalSeconds = timerSeconds;
+    const totalSeconds = currentTimer.seconds;
     const hours = Math.floor(totalSeconds / 3600);
     const minutes = Math.floor((totalSeconds % 3600) / 60);
     const seconds = totalSeconds % 60;
@@ -212,11 +557,141 @@ const DreamBuilderDashboard = () => {
   };
 
   const getAccumulatedDisplay = () => {
-    const totalHours = accumulatedHours + (timerSeconds / 3600);
+    const totalHours = currentTimer.accumulated + (currentTimer.seconds / 3600);
     return totalHours.toFixed(2);
   };
 
-  const currentField = fields[selectedField];
+
+  // Continuation of Streak
+
+  // Calculate streak based on check dates
+  const calculateStreak = (fieldId, currentCheckedSteps) => {
+    const today = getTodayString();
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const yesterdayString = yesterday.toISOString().split('T')[0];
+    
+    const lastCheck = stepStorageService.loadLastCheckDate(fieldId);
+    
+    // If no previous checks, streak is 1 if checked today
+    if (!lastCheck) {
+      return Object.values(currentCheckedSteps).some(step => step.date === today) ? 1 : 0;
+    }
+    
+    // If last check was today, maintain current streak
+    if (lastCheck === today) {
+      return currentField.streak;
+    }
+    
+    // If last check was yesterday and we checked today, increment streak
+    if (lastCheck === yesterdayString && Object.values(currentCheckedSteps).some(step => step.date === today)) {
+      return currentField.streak + 1;
+    }
+    
+    // If we checked today but last check was before yesterday, reset to 1
+    if (Object.values(currentCheckedSteps).some(step => step.date === today)) {
+      return 1;
+    }
+    
+    // If we didn't check today and last check wasn't today, reset to 0
+    return 0;
+  };
+
+  // Count today's completed steps
+  const countTodayCompleted = (steps) => {
+    const today = getTodayString();
+    return Object.values(steps).filter(step => step.checked && step.date === today).length;
+  };
+
+  // Handle checking a step
+  const handleCheckStep = async (stepIndex) => {
+    const today = getTodayString();
+    const newCheckedSteps = {
+      ...checkedSteps,
+      [stepIndex]: { checked: true, date: today }
+    };
+    
+    setCheckedSteps(newCheckedSteps);
+    stepStorageService.saveCheckedSteps(selectedField, newCheckedSteps);
+    
+    // Update last check date if this is the first check today
+    const wasCheckedToday = Object.values(checkedSteps).some(step => step.date === today);
+    if (!wasCheckedToday) {
+      stepStorageService.saveLastCheckDate(selectedField, today);
+      setLastCheckDate(today);
+    }
+    
+    // Calculate and update streak
+    const newStreak = calculateStreak(selectedField, newCheckedSteps);
+    await apiService.updateStreak(selectedField, newStreak);
+    
+    // Update milestones (total completed)
+    const completedCount = Object.values(newCheckedSteps).filter(s => s.checked).length;
+    await apiService.updateMilestones(selectedField, completedCount);
+    
+    // Update today's count
+    const todayCount = countTodayCompleted(newCheckedSteps);
+    setTodayCompletedCount(todayCount);
+    
+    await loadFields();
+  };
+
+  // Handle unchecking a step
+  const handleUncheckStep = async (stepIndex) => {
+    const today = getTodayString();
+    const stepToUncheck = checkedSteps[stepIndex];
+    
+    // Only allow unchecking if it was checked today
+    if (!stepToUncheck || stepToUncheck.date !== today) {
+      return;
+    }
+    
+    const newCheckedSteps = { ...checkedSteps };
+    delete newCheckedSteps[stepIndex];
+    
+    setCheckedSteps(newCheckedSteps);
+    stepStorageService.saveCheckedSteps(selectedField, newCheckedSteps);
+    
+    // Recalculate streak (might go to 0 if this was the only check today)
+    const newStreak = calculateStreak(selectedField, newCheckedSteps);
+    await apiService.updateStreak(selectedField, newStreak);
+    
+    // Update milestones
+    const completedCount = Object.values(newCheckedSteps).filter(s => s.checked).length;
+    await apiService.updateMilestones(selectedField, completedCount);
+    
+    // Update today's count
+    const todayCount = countTodayCompleted(newCheckedSteps);
+    setTodayCompletedCount(todayCount);
+    
+    await loadFields();
+  };
+
+
+
+  useEffect(() => {
+    const handleOnline = () => {
+      setIsOnline(true);
+      syncData();
+    };
+    const handleOffline = () => setIsOnline(false);
+    
+    initializeApp();
+    
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    
+    const syncInterval = setInterval(checkUnsyncedData, 10000);
+    
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+
 
   if (loading) {
     return (
@@ -241,7 +716,6 @@ const DreamBuilderDashboard = () => {
         alignItems: 'center',
         gap: '12px'
       }}>
-        {/* Sync Status */}
         {unsyncedCount > 0 && (
           <button
             onClick={syncData}
@@ -427,7 +901,7 @@ const DreamBuilderDashboard = () => {
                 <div style={{ fontSize: '28px', fontWeight: 'bold' }}>{currentField.timeSpent}h</div>
               </div>
 
-              {/* Timer Card - Spans 2 rows */}
+              {/* Timer Card */}
               <div style={timerCardStyle}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <Clock size={20} color="#fca5a5" />
@@ -450,8 +924,7 @@ const DreamBuilderDashboard = () => {
                     flexDirection: isMobile ? 'column' : 'row',
                     width: '100%'
                   }}>
-
-                    {!timerRunning ? (
+                    {!currentTimer.running ? (
                       <button
                         onClick={startTimer}
                         style={{
@@ -461,7 +934,6 @@ const DreamBuilderDashboard = () => {
                           border: 'none', borderRadius: '12px',
                           color: '#fff', cursor: 'pointer', fontSize: '16px', fontWeight: 600,
                           width: isMobile ? '100%' : 'auto'
-
                         }}
                       >
                         <Play size={20} />
@@ -477,7 +949,6 @@ const DreamBuilderDashboard = () => {
                           border: 'none', borderRadius: '12px',
                           color: '#fff', cursor: 'pointer', fontSize: '16px', fontWeight: 600,
                           width: isMobile ? '100%' : 'auto'
-
                         }}
                       >
                         <Pause size={20} />
@@ -487,17 +958,16 @@ const DreamBuilderDashboard = () => {
                     
                     <button
                       onClick={stopTimer}
-                      disabled={timerSeconds === 0}
+                      disabled={currentTimer.seconds === 0}
                       style={{
                         display: 'flex', alignItems: 'center', gap: '8px',
                         padding: '12px 24px',
-                        background: timerSeconds === 0 ? 'rgba(255, 255, 255, 0.1)' : 'linear-gradient(to right, #dc2626, #e11d48)',
+                        background: currentTimer.seconds === 0 ? 'rgba(255, 255, 255, 0.1)' : 'linear-gradient(to right, #dc2626, #e11d48)',
                         border: 'none', borderRadius: '12px',
-                        color: '#fff', cursor: timerSeconds === 0 ? 'not-allowed' : 'pointer',
+                        color: '#fff', cursor: currentTimer.seconds === 0 ? 'not-allowed' : 'pointer',
                         fontSize: '16px', fontWeight: 600,
-                        opacity: timerSeconds === 0 ? 0.5 : 1,
+                        opacity: currentTimer.seconds === 0 ? 0.5 : 1,
                         width: isMobile ? '100%' : 'auto'
-
                       }}
                     >
                       <Square size={20} />
@@ -531,7 +1001,7 @@ const DreamBuilderDashboard = () => {
                 <div style={{ fontSize: '28px', fontWeight: 'bold' }}>5d</div>
               </div>
 
-              {/* Goal Card - Moved to accommodate timer */}
+              {/* Goal Card */}
               <div style={{
                 gridColumn: isMobile ? 'span 1' : 'span 4', gridRow: isMobile ? 'span 1' : 'span 1',
                 background: 'linear-gradient(to bottom right, rgba(220, 38, 38, 0.15), rgba(225, 29, 72, 0.15))',
@@ -543,10 +1013,12 @@ const DreamBuilderDashboard = () => {
                 </div>
                 <EditableText
                   value={currentGoal}
-                  onSave={(newValue) => setCurrentGoal(newValue)}
+                  onSave={async (newValue) => {
+                    setCurrentGoal(newValue);
+                    await apiService.updateGoal(selectedField, newValue);
+                    await loadFields();
+                  }}
                 />
-
-
               </div>
 
               {/* Next Steps */}
@@ -566,7 +1038,6 @@ const DreamBuilderDashboard = () => {
                     <h3 style={{ fontSize: '20px', fontWeight: 600 }}>Next Steps</h3>
                   </div>
                   
-                  {/* Add Button */}
                   <button
                     onClick={addNextStep}
                     style={{
@@ -576,7 +1047,7 @@ const DreamBuilderDashboard = () => {
                       color: '#4ade80', cursor: 'pointer', fontSize: '13px'
                     }}
                   >
-                    <Play size={14} style={{ transform: 'rotate(-90deg)' }} /> {/* Using Play as a makeshift plus or import Plus from lucide-react */}
+                    <Play size={14} style={{ transform: 'rotate(-90deg)' }} />
                     Add Step
                   </button>
                 </div>
@@ -592,8 +1063,7 @@ const DreamBuilderDashboard = () => {
                   {nextSteps.map((step, idx) => (
                     <div key={idx} style={{
                       display: 'flex', alignItems: 'center', gap: '12px',
-                      backgroundColor: 'rgba(255, 255, 255, 0.05)', borderRadius: '12px', padding: '12px 16px',
-                      group: 'true' // Logical flag for hover effects
+                      backgroundColor: 'rgba(255, 255, 255, 0.05)', borderRadius: '12px', padding: '12px 16px'
                     }}>
                       <div style={{
                         width: '24px', height: '24px', borderRadius: '6px',
@@ -611,7 +1081,6 @@ const DreamBuilderDashboard = () => {
                         />
                       </div>
 
-                      {/* Delete Button */}
                       <button
                         onClick={() => deleteNextStep(idx)}
                         style={{
