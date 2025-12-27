@@ -10,6 +10,17 @@ const apiService = {
     if (!stored) {
       // Initialize with default data
       const defaultData = {
+        overall: {
+          id: 'overall',
+          name: 'Overall',
+          icon: '🎯',
+          goal: 'Become the best version of myself',
+          progress: 0,
+          timeSpent: 0,
+          milestones: 0,
+          streak: 0,
+          nextSteps: []
+        },
         business: {
           id: 'business',
           name: 'Business',
@@ -380,6 +391,30 @@ const DreamBuilderDashboard = () => {
   // Add this helper function to get today's date string
   const getTodayString = () => {
     return new Date().toISOString().split('T')[0];
+  };
+
+
+  // Add this helper function to calculate overall metrics
+  const calculateOverallMetrics = (fields) => {
+    const fieldKeys = ['business', 'tech', 'physical', 'social', 'misc'];
+    const validFields = fieldKeys.map(key => fields[key]).filter(Boolean);
+    
+    if (validFields.length === 0) {
+      return { progress: 0, timeSpent: 0, streak: 0 };
+    }
+    
+    const totalProgress = validFields.reduce((sum, field) => sum + (field.progress || 0), 0);
+    const avgProgress = Math.round(totalProgress / validFields.length);
+    
+    const totalTimeSpent = validFields.reduce((sum, field) => sum + (field.timeSpent || 0), 0);
+    
+    const minStreak = Math.min(...validFields.map(field => field.streak || 0));
+    
+    return {
+      progress: avgProgress,
+      timeSpent: totalTimeSpent,
+      streak: minStreak
+    };
   };
 
 
@@ -955,365 +990,502 @@ const DreamBuilderDashboard = () => {
               </div>
             </div>
 
-            {/* Bento Grid */}
-            <div style={{ 
+            {/* Conditional rendering: Overall tab vs Individual field tab */}
+            {selectedField === 'overall' ? (
+              // OVERALL TAB CONTENT
+              <div style={{ 
                 display: 'grid',
                 gridTemplateColumns: isMobile ? '1fr' : 'repeat(12, 1fr)',
                 gap: isMobile ? '12px' : '16px',
                 gridAutoRows: isMobile ? 'auto' : '140px'
               }}>
-              {/* Progress Card */}
-              <div style={{
-                gridColumn: isMobile ? 'span 1' : 'span 4', gridRow: isMobile ? 'span 1' : 'span 2', backgroundColor: '#1a1a1a',
-                border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '24px', padding: '24px',
-                position: 'relative', overflow: 'hidden'
-              }}>
-                <div style={{ position: 'relative', zIndex: 10, height: '100%', display: 'flex', flexDirection: isMobile ? 'column' : 'row',
-                  top: isMobile ? '12px' : '24px',
-                  right: isMobile ? '12px' : '24px',
-                  }}>
-                  <div style={{ color: '#9ca3af', fontSize: '14px', marginBottom: '8px' }}>Overall Progress</div>
-                  <div style={{ fontSize: '72px', fontWeight: 'bold', marginBottom: '16px' }}>{currentField.progress}%</div>
-                  <div style={{ marginTop: 'auto' }}>
-                    <div style={{ width: '100%', height: '12px', backgroundColor: 'rgba(255, 255, 255, 0.1)', borderRadius: '999px', overflow: 'hidden' }}>
-                      <div style={{
-                        height: '100%', width: `${currentField.progress}%`,
-                        background: 'linear-gradient(to right, #dc2626, #e11d48)',
-                        transition: 'width 0.3s ease'
-                      }} />
-                    </div>
-                    <div style={{ display: 'flex', gap: '8px', marginTop: '16px' }}>
-                      <button
-                        onClick={() => updateProgress(currentField.id, Math.max(0, currentField.progress - 5))}
-                        style={{
-                          padding: '8px 16px', backgroundColor: 'rgba(255, 255, 255, 0.1)',
-                          border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '8px',
-                          color: '#fff', cursor: 'pointer', fontSize: '14px'
-                        }}
-                      >
-                        -5%
-                      </button>
-                      <button
-                        onClick={() => updateProgress(currentField.id, Math.min(100, currentField.progress + 5))}
-                        style={{
-                          padding: '8px 16px', background: 'linear-gradient(to right, #dc2626, #e11d48)',
-                          border: 'none', borderRadius: '8px', color: '#fff', cursor: 'pointer', fontSize: '14px'
-                        }}
-                      >
-                        +5%
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Stats Cards */}
-              <div style={{ gridColumn: isMobile ? 'span 1':'span 2', backgroundColor: '#1a1a1a', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '16px', padding: '16px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-                  <Clock size={16} color="#dc2626" />
-                  <div style={{ color: '#6b7280', fontSize: '12px' }}>Time</div>
-                </div>
-                <div style={{ fontSize: '28px', fontWeight: 'bold' }}>{currentField.timeSpent}h</div>
-              </div>
-
-              {/* Timer Card */}
-              <div style={timerCardStyle}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <Clock size={20} color="#fca5a5" />
-                  <div style={{ color: '#9ca3af', fontSize: '14px' }}>Time Tracker</div>
-                </div>
-                
-                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', gap: '16px' }}>
-                  <div style={{ fontSize: isMobile ? '32px' : '48px', fontWeight: 'bold', fontFamily: 'monospace', letterSpacing: '4px' }}>
-                    {formatTimerDisplay()}
-                  </div>
-                  
-                  <div style={{ fontSize: '14px', color: '#9ca3af' }}>
-                    Accumulated: {getAccumulatedDisplay()}h (increments per hour)
-                  </div>
-                  
-                  <div style={{ 
-                    display: 'flex', 
-                    gap: '12px',
-                    marginTop: '8px',
-                    flexDirection: isMobile ? 'column' : 'row',
-                    width: '100%'
-                  }}>
-                    {!currentTimer.running ? (
-                      <button
-                        onClick={startTimer}
-                        style={{
-                          display: 'flex', alignItems: 'center', gap: '8px',
-                          padding: '12px 24px',
-                          background: 'linear-gradient(to right, #22c55e, #16a34a)',
-                          border: 'none', borderRadius: '12px',
-                          color: '#fff', cursor: 'pointer', fontSize: '16px', fontWeight: 600,
-                          width: isMobile ? '100%' : 'auto'
-                        }}
-                      >
-                        <Play size={20} />
-                        Start
-                      </button>
-                    ) : (
-                      <button
-                        onClick={pauseTimer}
-                        style={{
-                          display: 'flex', alignItems: 'center', gap: '8px',
-                          padding: '12px 24px',
-                          background: 'linear-gradient(to right, #eab308, #ca8a04)',
-                          border: 'none', borderRadius: '12px',
-                          color: '#fff', cursor: 'pointer', fontSize: '16px', fontWeight: 600,
-                          width: isMobile ? '100%' : 'auto'
-                        }}
-                      >
-                        <Pause size={20} />
-                        Pause
-                      </button>
-                    )}
-                    
-                    <button
-                      onClick={stopTimer}
-                      disabled={currentTimer.seconds === 0}
-                      style={{
-                        display: 'flex', alignItems: 'center', gap: '8px',
-                        padding: '12px 24px',
-                        background: currentTimer.seconds === 0 ? 'rgba(255, 255, 255, 0.1)' : 'linear-gradient(to right, #dc2626, #e11d48)',
-                        border: 'none', borderRadius: '12px',
-                        color: '#fff', cursor: currentTimer.seconds === 0 ? 'not-allowed' : 'pointer',
-                        fontSize: '16px', fontWeight: 600,
-                        opacity: currentTimer.seconds === 0 ? 0.5 : 1,
-                        width: isMobile ? '100%' : 'auto'
-                      }}
-                    >
-                      <Square size={20} />
-                      Stop & Save
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              {/* Done stat card - now shows today's completed count */}
-              <div style={{ 
-                gridColumn: isMobile ? 'span 1' : 'span 2', 
-                backgroundColor: '#1a1a1a', 
-                border: '1px solid rgba(255, 255, 255, 0.1)', 
-                borderRadius: '16px', 
-                padding: '16px' 
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-                  <CheckCircle2 size={16} color="#dc2626" />
-                  <div style={{ color: '#6b7280', fontSize: '12px' }}>Done Today</div>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
-                  <div style={{ fontSize: '28px', fontWeight: 'bold' }}>{todayCompletedCount}</div>
-                </div>
-              </div>
-
-              <div style={{ gridColumn: isMobile ? 'span 1' : 'span 2', backgroundColor: '#1a1a1a', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '16px', padding: '16px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-                  <Flame size={16} color="#dc2626" />
-                  <div style={{ color: '#6b7280', fontSize: '12px' }}>Streak</div>
-                </div>
-                <div style={{ fontSize: '28px', fontWeight: 'bold' }}>{currentField.streak}</div>
-              </div>
-
-              <div style={{ gridColumn: isMobile ? 'span 1' : 'span 2', backgroundColor: '#1a1a1a', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '16px', padding: '16px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
-                  <Calendar size={16} color="#dc2626" />
-                  <div style={{ color: '#6b7280', fontSize: '12px' }}>Week</div>
-                </div>
-                <div style={{ fontSize: '28px', fontWeight: 'bold' }}>5d</div>
-              </div>
-
-              {/* Goal Card */}
-              <div style={{
-                gridColumn: isMobile ? 'span 1' : 'span 4', gridRow: isMobile ? 'span 1' : 'span 1',
-                background: 'linear-gradient(to bottom right, rgba(220, 38, 38, 0.15), rgba(225, 29, 72, 0.15))',
-                border: '1px solid rgba(220, 38, 38, 0.3)', borderRadius: '24px', padding: '24px'
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
-                  <Target size={20} color="#fca5a5" />
-                  <div style={{ color: '#9ca3af', fontSize: '14px' }}>Current Goal</div>
-                </div>
-                <EditableText
-                  value={currentGoal}
-                  onSave={async (newValue) => {
-                    setCurrentGoal(newValue);
-                    await apiService.updateGoal(selectedField, newValue);
-                    await loadFields();
-                  }}
-                />
-              </div>
-
-              {/* Next Steps */}
-              <div style={{ 
-                gridColumn: isMobile ? 'span 1' : 'span 8', 
-                gridRow: isMobile ? 'span 1' : 'span 3', 
-                backgroundColor: '#1a1a1a', 
-                border: '1px solid rgba(255, 255, 255, 0.1)', 
-                borderRadius: '24px', 
-                padding: '24px',
-                display: 'flex',
-                flexDirection: 'column'
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <TrendingUp size={20} color="#fca5a5" />
-                    <h3 style={{ fontSize: '20px', fontWeight: 600 }}>Next Steps</h3>
-                  </div>
-                  
-                  <button
-                    onClick={addNextStep}
-                    style={{
-                      display: 'flex', alignItems: 'center', gap: '4px',
-                      padding: '6px 12px', backgroundColor: 'rgba(34, 197, 94, 0.2)',
-                      border: '1px solid rgba(34, 197, 94, 0.3)', borderRadius: '8px',
-                      color: '#4ade80', cursor: 'pointer', fontSize: '13px'
-                    }}
-                  >
-                    <Play size={14} style={{ transform: 'rotate(-90deg)' }} />
-                    Add Step
-                  </button>
-                </div>
-
-                <div style={{ 
-                  display: 'flex', 
-                  flexDirection: 'column',
-                  gap: '12px', 
-                  maxHeight: '340px', 
-                  overflowY: 'auto',
-                  paddingRight: '4px' 
+                {/* Overall Stats Summary */}
+                <div style={{
+                  gridColumn: isMobile ? 'span 1' : 'span 12',
+                  gridRow: 'span 2',
+                  background: 'linear-gradient(to bottom right, rgba(220, 38, 38, 0.15), rgba(225, 29, 72, 0.15))',
+                  border: '1px solid rgba(220, 38, 38, 0.3)',
+                  borderRadius: '24px',
+                  padding: '32px'
                 }}>
-                  {nextSteps.map((step, idx) => {
-                    const isChecked = checkedSteps[idx]?.checked;
-                    const checkDate = checkedSteps[idx]?.date;
-                    const today = getTodayString();
-                    const canUndo = isChecked && checkDate === today;
-                    
-                    return (
-                      <div key={idx} style={{
-                        display: 'flex', alignItems: 'center', gap: '12px',
-                        backgroundColor: isChecked ? 'rgba(34, 197, 94, 0.1)' : 'rgba(255, 255, 255, 0.05)', 
-                        borderRadius: '12px', 
-                        padding: '12px 16px',
-                        border: isChecked ? '1px solid rgba(34, 197, 94, 0.3)' : 'none',
-                        transition: 'all 0.2s'
-                      }}>
-                        {/* Checkbox - make it toggleable */}
-                        <button
-                          onClick={() => isChecked ? handleUncheckStep(idx) : handleCheckStep(idx)}
-                          disabled={isChecked && !canUndo}
-                          style={{
-                            width: '24px',
-                            height: '24px',
-                            borderRadius: '6px',
-                            backgroundColor: isChecked ? 'rgba(34, 197, 94, 0.3)' : 'transparent',
-                            border: isChecked ? '2px solid #22c55e' : '2px solid rgba(255, 255, 255, 0.3)',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            cursor: (isChecked && !canUndo) ? 'not-allowed' : 'pointer',
-                            flexShrink: 0,
-                            transition: 'all 0.2s',
-                            opacity: (isChecked && !canUndo) ? 0.5 : 1
-                          }}
-                        >
-                          {isChecked && <CheckCircle2 size={16} color="#22c55e" />}
-                        </button>
-                        
+                  <h2 style={{ fontSize: '24px', fontWeight: 'bold', marginBottom: '24px' }}>Your Journey Overview</h2>
+                  
+                  <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)', gap: '24px' }}>
+                    {/* Average Progress */}
+                    <div style={{ 
+                      backgroundColor: 'rgba(0, 0, 0, 0.3)', 
+                      padding: '24px', 
+                      borderRadius: '16px',
+                      border: '1px solid rgba(255, 255, 255, 0.1)'
+                    }}>
+                      <div style={{ color: '#9ca3af', fontSize: '14px', marginBottom: '8px' }}>Average Progress</div>
+                      <div style={{ fontSize: '48px', fontWeight: 'bold', marginBottom: '12px' }}>
+                        {calculateOverallMetrics(fields).progress}%
+                      </div>
+                      <div style={{ width: '100%', height: '8px', backgroundColor: 'rgba(255, 255, 255, 0.1)', borderRadius: '999px', overflow: 'hidden' }}>
                         <div style={{
-                          width: '24px', height: '24px', borderRadius: '6px',
-                          backgroundColor: 'rgba(220, 38, 38, 0.2)', 
-                          border: '1px solid rgba(220, 38, 38, 0.3)',
-                          display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          fontSize: '12px', fontWeight: 'bold', flexShrink: 0
-                        }}>
-                          {idx + 1}
-                        </div>
-                        
-                        <div style={{ 
-                          flex: 1,
-                          textDecoration: isChecked ? 'line-through' : 'none',
-                          opacity: isChecked ? 0.6 : 1
-                        }}>
-                          <EditableText
-                            value={step}
-                            onSave={(newValue) => updateNextStep(idx, newValue)}
-                          />
-                        </div>
+                          height: '100%',
+                          width: `${calculateOverallMetrics(fields).progress}%`,
+                          background: 'linear-gradient(to right, #dc2626, #e11d48)',
+                          transition: 'width 0.3s ease'
+                        }} />
+                      </div>
+                    </div>
 
-                        {/* Undo button - only shows if checked today */}
-                        {canUndo && (
+                    {/* Total Time */}
+                    <div style={{ 
+                      backgroundColor: 'rgba(0, 0, 0, 0.3)', 
+                      padding: '24px', 
+                      borderRadius: '16px',
+                      border: '1px solid rgba(255, 255, 255, 0.1)'
+                    }}>
+                      <div style={{ color: '#9ca3af', fontSize: '14px', marginBottom: '8px' }}>Total Time Invested</div>
+                      <div style={{ fontSize: '48px', fontWeight: 'bold' }}>
+                        {calculateOverallMetrics(fields).timeSpent}
+                      </div>
+                      <div style={{ color: '#6b7280', fontSize: '14px' }}>hours across all fields</div>
+                    </div>
+
+                    {/* Minimum Streak */}
+                    <div style={{ 
+                      backgroundColor: 'rgba(0, 0, 0, 0.3)', 
+                      padding: '24px', 
+                      borderRadius: '16px',
+                      border: '1px solid rgba(255, 255, 255, 0.1)'
+                    }}>
+                      <div style={{ color: '#9ca3af', fontSize: '14px', marginBottom: '8px' }}>Consistency Streak</div>
+                      <div style={{ fontSize: '48px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <Flame size={40} color="#dc2626" />
+                        {calculateOverallMetrics(fields).streak}
+                      </div>
+                      <div style={{ color: '#6b7280', fontSize: '14px' }}>days minimum across fields</div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Individual Field Breakdown */}
+                <div style={{
+                  gridColumn: isMobile ? 'span 1' : 'span 12',
+                  gridRow: 'span 4',
+                  backgroundColor: '#1a1a1a',
+                  border: '1px solid rgba(255, 255, 255, 0.1)',
+                  borderRadius: '24px',
+                  padding: '32px'
+                }}>
+                  <h2 style={{ fontSize: '24px', fontWeight: 'bold', marginBottom: '24px' }}>Field Breakdown</h2>
+                  
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                    {['business', 'tech', 'physical', 'social', 'misc'].map(fieldKey => {
+                      const field = fields[fieldKey];
+                      if (!field) return null;
+                      
+                      return (
+                        <div key={fieldKey} style={{
+                          display: 'grid',
+                          gridTemplateColumns: isMobile ? '1fr' : '80px 1fr 120px 120px 120px',
+                          gap: '16px',
+                          alignItems: 'center',
+                          padding: '20px',
+                          backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                          borderRadius: '12px',
+                          border: '1px solid rgba(255, 255, 255, 0.1)'
+                        }}>
+                          {/* Icon & Name */}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                            <div style={{ fontSize: '32px' }}>{field.icon}</div>
+                            <div style={{ fontWeight: 600, fontSize: '18px' }}>{field.name}</div>
+                          </div>
+
+                          {/* Progress Bar */}
+                          <div style={{ flex: 1 }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
+                              <span style={{ fontSize: '12px', color: '#9ca3af' }}>Progress</span>
+                              <span style={{ fontSize: '12px', fontWeight: 'bold' }}>{field.progress}%</span>
+                            </div>
+                            <div style={{ width: '100%', height: '8px', backgroundColor: 'rgba(255, 255, 255, 0.1)', borderRadius: '999px', overflow: 'hidden' }}>
+                              <div style={{
+                                height: '100%',
+                                width: `${field.progress}%`,
+                                background: 'linear-gradient(to right, #dc2626, #e11d48)',
+                                transition: 'width 0.3s ease'
+                              }} />
+                            </div>
+                          </div>
+
+                          {/* Time */}
+                          <div style={{ textAlign: 'center' }}>
+                            <div style={{ fontSize: '12px', color: '#9ca3af', marginBottom: '4px' }}>Time</div>
+                            <div style={{ fontSize: '20px', fontWeight: 'bold' }}>{field.timeSpent}h</div>
+                          </div>
+
+                          {/* Streak */}
+                          <div style={{ textAlign: 'center' }}>
+                            <div style={{ fontSize: '12px', color: '#9ca3af', marginBottom: '4px' }}>Streak</div>
+                            <div style={{ fontSize: '20px', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
+                              <Flame size={16} color="#dc2626" />
+                              {field.streak}
+                            </div>
+                          </div>
+
+                          {/* View Button */}
                           <button
-                            onClick={() => handleUncheckStep(idx)}
+                            onClick={() => setSelectedField(fieldKey)}
                             style={{
-                              padding: '6px 12px',
-                              backgroundColor: 'rgba(234, 179, 8, 0.2)',
-                              border: '1px solid rgba(234, 179, 8, 0.3)',
-                              borderRadius: '6px',
-                              color: '#eab308',
+                              padding: '8px 16px',
+                              background: 'linear-gradient(to right, #dc2626, #e11d48)',
+                              border: 'none',
+                              borderRadius: '8px',
+                              color: '#fff',
                               cursor: 'pointer',
-                              fontSize: '12px',
-                              fontWeight: 600,
-                              transition: 'all 0.2s'
-                            }}
-                            onMouseEnter={(e) => {
-                              e.currentTarget.style.backgroundColor = 'rgba(234, 179, 8, 0.3)';
-                            }}
-                            onMouseLeave={(e) => {
-                              e.currentTarget.style.backgroundColor = 'rgba(234, 179, 8, 0.2)';
+                              fontSize: '14px',
+                              fontWeight: 600
                             }}
                           >
-                            Undo
+                            View
                           </button>
-                        )}
-
-                        {/* Date badge for completed items from previous days */}
-                        {isChecked && !canUndo && (
-                          <span style={{
-                            fontSize: '11px',
-                            color: '#6b7280',
-                            backgroundColor: 'rgba(255, 255, 255, 0.05)',
-                            padding: '4px 8px',
-                            borderRadius: '4px'
-                          }}>
-                            {checkDate}
-                          </span>
-                        )}
-
-                        <button
-                          onClick={() => deleteNextStep(idx)}
-                          style={{
-                            padding: '8px',
-                            backgroundColor: 'transparent',
-                            border: 'none',
-                            color: '#6b7280',
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            transition: 'color 0.2s'
-                          }}
-                          onMouseEnter={(e) => e.currentTarget.style.color = '#ef4444'}
-                          onMouseLeave={(e) => e.currentTarget.style.color = '#6b7280'}
-                        >
-                          <X size={18} />
-                        </button>
-                      </div>
-                    );
-                  })}
-
-                  {nextSteps.length === 0 && (
-                    <div style={{ color: '#6b7280', textAlign: 'center', padding: '32px' }}>
-                      No next steps yet. Click add to begin.
-                    </div>
-                  )}
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
+            ) : (
+              // INDIVIDUAL FIELD TAB CONTENT (your existing Bento Grid)
+                <div style={{ 
+                  display: 'grid',
+                  gridTemplateColumns: isMobile ? '1fr' : 'repeat(12, 1fr)',
+                  gap: isMobile ? '12px' : '16px',
+                  gridAutoRows: isMobile ? 'auto' : '140px'
+                }}>
+                  {/* Progress Card */}
+                  <div style={{
+                    gridColumn: isMobile ? 'span 1' : 'span 4', gridRow: isMobile ? 'span 1' : 'span 2', backgroundColor: '#1a1a1a',
+                    border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '24px', padding: '24px',
+                    position: 'relative', overflow: 'hidden'
+                  }}>
+                    <div style={{ position: 'relative', zIndex: 10, height: '100%', display: 'flex', flexDirection: isMobile ? 'column' : 'row',
+                      top: isMobile ? '12px' : '24px',
+                      right: isMobile ? '12px' : '24px',
+                      }}>
+                      <div style={{ color: '#9ca3af', fontSize: '14px', marginBottom: '8px' }}>Overall Progress</div>
+                      <div style={{ fontSize: '72px', fontWeight: 'bold', marginBottom: '16px' }}>{currentField.progress}%</div>
+                      <div style={{ marginTop: 'auto' }}>
+                        <div style={{ width: '100%', height: '12px', backgroundColor: 'rgba(255, 255, 255, 0.1)', borderRadius: '999px', overflow: 'hidden' }}>
+                          <div style={{
+                            height: '100%', width: `${currentField.progress}%`,
+                            background: 'linear-gradient(to right, #dc2626, #e11d48)',
+                            transition: 'width 0.3s ease'
+                          }} />
+                        </div>
+                        <div style={{ display: 'flex', gap: '8px', marginTop: '16px' }}>
+                          <button
+                            onClick={() => updateProgress(currentField.id, Math.max(0, currentField.progress - 5))}
+                            style={{
+                              padding: '8px 16px', backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                              border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '8px',
+                              color: '#fff', cursor: 'pointer', fontSize: '14px'
+                            }}
+                          >
+                            -5%
+                          </button>
+                          <button
+                            onClick={() => updateProgress(currentField.id, Math.min(100, currentField.progress + 5))}
+                            style={{
+                              padding: '8px 16px', background: 'linear-gradient(to right, #dc2626, #e11d48)',
+                              border: 'none', borderRadius: '8px', color: '#fff', cursor: 'pointer', fontSize: '14px'
+                            }}
+                          >
+                            +5%
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Stats Cards */}
+                  <div style={{ gridColumn: isMobile ? 'span 1':'span 2', backgroundColor: '#1a1a1a', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '16px', padding: '16px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                      <Clock size={16} color="#dc2626" />
+                      <div style={{ color: '#6b7280', fontSize: '12px' }}>Time</div>
+                    </div>
+                    <div style={{ fontSize: '28px', fontWeight: 'bold' }}>{currentField.timeSpent}h</div>
+                  </div>
+
+                  {/* Timer Card */}
+                  <div style={timerCardStyle}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <Clock size={20} color="#fca5a5" />
+                      <div style={{ color: '#9ca3af', fontSize: '14px' }}>Time Tracker</div>
+                    </div>
+                    
+                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', gap: '16px' }}>
+                      <div style={{ fontSize: isMobile ? '32px' : '48px', fontWeight: 'bold', fontFamily: 'monospace', letterSpacing: '4px' }}>
+                        {formatTimerDisplay()}
+                      </div>
+                      
+                      <div style={{ fontSize: '14px', color: '#9ca3af' }}>
+                        Accumulated: {getAccumulatedDisplay()}h (increments per hour)
+                      </div>
+                      
+                      <div style={{ 
+                        display: 'flex', 
+                        gap: '12px',
+                        marginTop: '8px',
+                        flexDirection: isMobile ? 'column' : 'row',
+                        width: '100%'
+                      }}>
+                        {!currentTimer.running ? (
+                          <button
+                            onClick={startTimer}
+                            style={{
+                              display: 'flex', alignItems: 'center', gap: '8px',
+                              padding: '12px 24px',
+                              background: 'linear-gradient(to right, #22c55e, #16a34a)',
+                              border: 'none', borderRadius: '12px',
+                              color: '#fff', cursor: 'pointer', fontSize: '16px', fontWeight: 600,
+                              width: isMobile ? '100%' : 'auto'
+                            }}
+                          >
+                            <Play size={20} />
+                            Start
+                          </button>
+                        ) : (
+                          <button
+                            onClick={pauseTimer}
+                            style={{
+                              display: 'flex', alignItems: 'center', gap: '8px',
+                              padding: '12px 24px',
+                              background: 'linear-gradient(to right, #eab308, #ca8a04)',
+                              border: 'none', borderRadius: '12px',
+                              color: '#fff', cursor: 'pointer', fontSize: '16px', fontWeight: 600,
+                              width: isMobile ? '100%' : 'auto'
+                            }}
+                          >
+                            <Pause size={20} />
+                            Pause
+                          </button>
+                        )}
+                        
+                        <button
+                          onClick={stopTimer}
+                          disabled={currentTimer.seconds === 0}
+                          style={{
+                            display: 'flex', alignItems: 'center', gap: '8px',
+                            padding: '12px 24px',
+                            background: currentTimer.seconds === 0 ? 'rgba(255, 255, 255, 0.1)' : 'linear-gradient(to right, #dc2626, #e11d48)',
+                            border: 'none', borderRadius: '12px',
+                            color: '#fff', cursor: currentTimer.seconds === 0 ? 'not-allowed' : 'pointer',
+                            fontSize: '16px', fontWeight: 600,
+                            opacity: currentTimer.seconds === 0 ? 0.5 : 1,
+                            width: isMobile ? '100%' : 'auto'
+                          }}
+                        >
+                          <Square size={20} />
+                          Stop & Save
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Done stat card */}
+                  <div style={{ 
+                    gridColumn: isMobile ? 'span 1' : 'span 2', 
+                    backgroundColor: '#1a1a1a', 
+                    border: '1px solid rgba(255, 255, 255, 0.1)', 
+                    borderRadius: '16px', 
+                    padding: '16px' 
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                      <CheckCircle2 size={16} color="#dc2626" />
+                      <div style={{ color: '#6b7280', fontSize: '12px' }}>Done Today</div>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
+                      <div style={{ fontSize: '28px', fontWeight: 'bold' }}>{todayCompletedCount}</div>
+                    </div>
+                  </div>
+
+                  {/* Streak */}
+                  <div style={{ gridColumn: isMobile ? 'span 1' : 'span 2', backgroundColor: '#1a1a1a', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '16px', padding: '16px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                      <Flame size={16} color="#dc2626" />
+                      <div style={{ color: '#6b7280', fontSize: '12px' }}>Streak</div>
+                    </div>
+                    <div style={{ fontSize: '28px', fontWeight: 'bold' }}>{currentField.streak}</div>
+                  </div>
+
+                  {/* Week */}
+                  <div style={{ gridColumn: isMobile ? 'span 1' : 'span 2', backgroundColor: '#1a1a1a', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '16px', padding: '16px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                      <Calendar size={16} color="#dc2626" />
+                      <div style={{ color: '#6b7280', fontSize: '12px' }}>Week</div>
+                    </div>
+                    <div style={{ fontSize: '28px', fontWeight: 'bold' }}>5d</div>
+                  </div>
+
+                  {/* Goal Card */}
+                  <div style={{
+                    gridColumn: isMobile ? 'span 1' : 'span 4', gridRow: isMobile ? 'span 1' : 'span 1',
+                    background: 'linear-gradient(to bottom right, rgba(220, 38, 38, 0.15), rgba(225, 29, 72, 0.15))',
+                    border: '1px solid rgba(220, 38, 38, 0.3)', borderRadius: '24px', padding: '24px'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                      <Target size={20} color="#fca5a5" />
+                      <div style={{ color: '#9ca3af', fontSize: '14px' }}>Current Goal</div>
+                    </div>
+                    <EditableText
+                      value={currentGoal}
+                      onSave={async (newValue) => {
+                        setCurrentGoal(newValue);
+                        await apiService.updateGoal(selectedField, newValue);
+                        await loadFields();
+                      }}
+                    />
+                  </div>
+
+                  {/* Next Steps */}
+                  <div style={{ 
+                    gridColumn: isMobile ? 'span 1' : 'span 8', 
+                    gridRow: isMobile ? 'span 1' : 'span 3', 
+                    backgroundColor: '#1a1a1a', 
+                    border: '1px solid rgba(255, 255, 255, 0.1)', 
+                    borderRadius: '24px', 
+                    padding: '24px',
+                    display: 'flex',
+                    flexDirection: 'column'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <TrendingUp size={20} color="#fca5a5" />
+                        <h3 style={{ fontSize: '20px', fontWeight: 600 }}>Next Steps</h3>
+                      </div>
+                      
+                      <button
+                        onClick={addNextStep}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: '4px',
+                          padding: '6px 12px', backgroundColor: 'rgba(34, 197, 94, 0.2)',
+                          border: '1px solid rgba(34, 197, 94, 0.3)', borderRadius: '8px',
+                          color: '#4ade80', cursor: 'pointer', fontSize: '13px'
+                        }}
+                      >
+                        <Play size={14} style={{ transform: 'rotate(-90deg)' }} />
+                        Add Step
+                      </button>
+                    </div>
+
+                    <div style={{ 
+                      display: 'flex', 
+                      flexDirection: 'column',
+                      gap: '12px', 
+                      maxHeight: '340px', 
+                      overflowY: 'auto',
+                      paddingRight: '4px' 
+                    }}>
+                      {nextSteps.map((step, idx) => {
+                        const isChecked = checkedSteps[idx]?.checked;
+                        const checkDate = checkedSteps[idx]?.date;
+                        const today = getTodayString();
+                        const canUndo = isChecked && checkDate === today;
+                        
+                        return (
+                          <div key={idx} style={{
+                            display: 'flex', alignItems: 'center', gap: '12px',
+                            backgroundColor: isChecked ? 'rgba(34, 197, 94, 0.1)' : 'rgba(255, 255, 255, 0.05)', 
+                            borderRadius: '12px', 
+                            padding: '12px 16px',
+                            border: isChecked ? '1px solid rgba(34, 197, 94, 0.3)' : 'none',
+                            transition: 'all 0.2s'
+                          }}>
+                            {/* Checkbox */}
+                            <button
+                              onClick={() => isChecked ? handleUncheckStep(idx) : handleCheckStep(idx)}
+                              disabled={isChecked && !canUndo}
+                              style={{
+                                width: '24px',
+                                height: '24px',
+                                borderRadius: '6px',
+                                backgroundColor: isChecked ? 'rgba(34, 197, 94, 0.3)' : 'transparent',
+                                border: isChecked ? '2px solid #22c55e' : '2px solid rgba(255, 255, 255, 0.3)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                cursor: (isChecked && !canUndo) ? 'not-allowed' : 'pointer',
+                                flexShrink: 0,
+                                transition: 'all 0.2s',
+                                opacity: (isChecked && !canUndo) ? 0.5 : 1
+                              }}
+                            >
+                              {isChecked && <CheckCircle2 size={16} color="#22c55e" />}
+                            </button>
+                            
+                            <div style={{
+                              width: '24px', height: '24px', borderRadius: '6px',
+                              backgroundColor: 'rgba(220, 38, 38, 0.2)', 
+                              border: '1px solid rgba(220, 38, 38, 0.3)',
+                              display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              fontSize: '12px', fontWeight: 'bold', flexShrink: 0
+                            }}>
+                              {idx + 1}
+                            </div>
+                            
+                            <div style={{ 
+                              flex: 1,
+                              textDecoration: isChecked ? 'line-through' : 'none',
+                              opacity: isChecked ? 0.6 : 1
+                            }}>
+                              <EditableText
+                                value={step}
+                                onSave={(newValue) => updateNextStep(idx, newValue)}
+                              />
+                            </div>
+
+                            {/* Date badge for completed items from previous days */}
+                            {isChecked && !canUndo && (
+                              <span style={{
+                                fontSize: '11px',
+                                color: '#6b7280',
+                                backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                                padding: '4px 8px',
+                                borderRadius: '4px'
+                              }}>
+                                {checkDate}
+                              </span>
+                            )}
+
+                            <button
+                              onClick={() => deleteNextStep(idx)}
+                              style={{
+                                padding: '8px',
+                                backgroundColor: 'transparent',
+                                border: 'none',
+                                color: '#6b7280',
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                transition: 'color 0.2s'
+                              }}
+                              onMouseEnter={(e) => e.currentTarget.style.color = '#ef4444'}
+                              onMouseLeave={(e) => e.currentTarget.style.color = '#6b7280'}
+                            >
+                              <X size={18} />
+                            </button>
+                          </div>
+                        );
+                      })}
+
+                      {nextSteps.length === 0 && (
+                        <div style={{ color: '#6b7280', textAlign: 'center', padding: '32px' }}>
+                          No next steps yet. Click add to begin.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
-        </div>
-      )}
+        )}
 
       <style>
         {`
