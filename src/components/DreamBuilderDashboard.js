@@ -1,33 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Target, Clock, TrendingUp, CheckCircle2, Menu, X, Flame, Calendar, Wifi, WifiOff, RefreshCw, Play, Pause, Square } from 'lucide-react';
 
-// Add these helper functions near the top of your component
-const saveTimerState = (seconds, accumulated, running) => {
-  localStorage.setItem('timerState', JSON.stringify({
-    seconds,
-    accumulated,
-    running,
-    timestamp: Date.now()
-  }));
-};
 
-const loadTimerState = () => {
-  const saved = localStorage.getItem('timerState');
-  if (saved) {
-    const state = JSON.parse(saved);
-    // If timer was running when page closed, calculate elapsed time
-    if (state.running) {
-      const elapsed = Math.floor((Date.now() - state.timestamp) / 1000);
-      return {
-        seconds: state.seconds + elapsed,
-        accumulated: state.accumulated,
-        running: true
-      };
-    }
-    return state;
-  }
-  return null;
-};
 
 const apiService = {
   initialize: async () => {
@@ -283,9 +257,35 @@ const DreamBuilderDashboard = () => {
   const deleteNextStep = async (indexToDelete) => {
     const updatedSteps = nextSteps.filter((_, idx) => idx !== indexToDelete);
     setNextSteps(updatedSteps);
-    // Add this to persist the change
+    
+    // Update checked steps - reindex them
+    const newCheckedSteps = {};
+    Object.keys(checkedSteps).forEach(key => {
+      const oldIndex = parseInt(key);
+      if (oldIndex < indexToDelete) {
+        // Keep same index
+        newCheckedSteps[oldIndex] = checkedSteps[key];
+      } else if (oldIndex > indexToDelete) {
+        // Shift index down by 1
+        newCheckedSteps[oldIndex - 1] = checkedSteps[key];
+      }
+      // Skip the deleted index
+    });
+    
+    setCheckedSteps(newCheckedSteps);
+    stepStorageService.saveCheckedSteps(selectedField, newCheckedSteps);
+    
+    // Update milestones count
+    const completedCount = Object.values(newCheckedSteps).filter(s => s.checked).length;
+    await apiService.updateMilestones(selectedField, completedCount);
+    
+    // Update today's count
+    const todayCount = countTodayCompleted(newCheckedSteps);
+    setTodayCompletedCount(todayCount);
+    
     try {
       await apiService.updateNextSteps(selectedField, updatedSteps);
+      await loadFields();
     } catch (error) {
       console.error('Error deleting next step:', error);
     }
@@ -416,12 +416,123 @@ const DreamBuilderDashboard = () => {
 
   // Timer
 
+  // Add these timer storage functions after stepStorageService
+  const saveTimerState = (fieldId, seconds, accumulated, running) => {
+    const allTimers = JSON.parse(localStorage.getItem('allTimerStates') || '{}');
+    allTimers[fieldId] = {
+      seconds,
+      accumulated,
+      running,
+      timestamp: Date.now()
+    };
+    localStorage.setItem('allTimerStates', JSON.stringify(allTimers));
+    if (running) {
+      localStorage.setItem('activeTimerField', fieldId);
+    } else {
+      // Clear active timer if this was the running one
+      const activeField = localStorage.getItem('activeTimerField');
+      if (activeField === fieldId) {
+        localStorage.removeItem('activeTimerField');
+      }
+    }
+  };
+
+  const loadTimerState = (fieldId) => {
+    const allTimers = JSON.parse(localStorage.getItem('allTimerStates') || '{}');
+    const state = allTimers[fieldId];
+    const isPageLoad = !window.timerInitialized; // Check if this is initial page load
+    
+    if (state) {
+      if (state.running) {
+        const elapsed = Math.floor((Date.now() - state.timestamp) / 1000);
+        return {
+          seconds: state.seconds + elapsed,
+          accumulated: state.accumulated,
+          running: isPageLoad ? false : true  // Only pause on page load, not field switch
+        };
+      }
+      return state;
+    }
+    return { seconds: 0, accumulated: 0, running: false };
+  };
+
+  // Update this useEffect
   useEffect(() => {
     if (currentField) {
       setCurrentGoal(currentField.goal || "");
       setNextSteps(currentField.nextSteps || []);
+      
+      // Load checked steps for this field
+      const loadedCheckedSteps = stepStorageService.loadCheckedSteps(selectedField);
+      setCheckedSteps(loadedCheckedSteps);
+      
+      // Load last check date
+      const loadedLastCheckDate = stepStorageService.loadLastCheckDate(selectedField);
+      setLastCheckDate(loadedLastCheckDate);
+      
+      // Calculate today's completed count
+      const todayCount = countTodayCompleted(loadedCheckedSteps);
+      setTodayCompletedCount(todayCount);
+      
+      // Load timer state for this field
+      const savedTimer = loadTimerState(selectedField);
+      if (savedTimer) {
+        setFieldTimers(prev => ({
+          ...prev,
+          [selectedField]: savedTimer
+        }));
+        
+        // If timer is running and no interval exists, start it
+        if (savedTimer.running && !timerIntervalRef.current) {
+          timerIntervalRef.current = setInterval(() => {
+            setFieldTimers(prev => {
+              const newTimers = { ...prev };
+              Object.keys(newTimers).forEach(fieldId => {
+                if (newTimers[fieldId]?.running) {
+                  newTimers[fieldId] = {
+                    ...newTimers[fieldId],
+                    seconds: newTimers[fieldId].seconds + 1
+                  };
+                  saveTimerState(fieldId, newTimers[fieldId].seconds, newTimers[fieldId].accumulated, true);
+                }
+              });
+              return newTimers;
+            });
+          }, 1000);
+        }
+      }
     }
   }, [selectedField, fields, currentField]);
+
+  // Add this new useEffect to check streak at midnight
+  useEffect(() => {
+    const checkDailyStreak = async () => {
+      if (!currentField) return;
+      
+      const today = getTodayString();
+      const lastCheck = stepStorageService.loadLastCheckDate(selectedField);
+      
+      // If last check wasn't today, check if streak should reset
+      if (lastCheck && lastCheck !== today) {
+        const yesterday = new Date();
+        yesterday.setDate(yesterday.getDate() - 1);
+        const yesterdayString = yesterday.toISOString().split('T')[0];
+        
+        // If last check wasn't yesterday, reset streak to 0
+        if (lastCheck !== yesterdayString) {
+          await apiService.updateStreak(selectedField, 0);
+          await loadFields();
+        }
+      }
+    };
+    
+    checkDailyStreak();
+    
+    // Check every hour if day has changed
+    const intervalId = setInterval(checkDailyStreak, 3600000); // 1 hour
+    
+    return () => clearInterval(intervalId);
+  }, [selectedField, currentField]);
 
   const updateProgress = async (fieldId, newProgress) => {
     try {
@@ -502,41 +613,36 @@ const DreamBuilderDashboard = () => {
     const currentSessionHours = timer.seconds / 3600;
     const totalHours = timer.accumulated + currentSessionHours;
     
+    // Update the field timers first
+    const updatedFieldTimers = {
+      ...fieldTimers,
+      [fieldId]: {
+        seconds: 0,
+        accumulated: totalHours >= 1 ? totalHours - Math.floor(totalHours) : totalHours,
+        running: false
+      }
+    };
+    
+    setFieldTimers(updatedFieldTimers);
+    
+    // Save timer state
     if (totalHours >= 1) {
       const hoursToAdd = Math.floor(totalHours);
+      const remainingHours = totalHours - hoursToAdd;
+      saveTimerState(fieldId, 0, remainingHours, false);
+      
       try {
         await apiService.addTimeSpent(fieldId, hoursToAdd);
         await loadFields();
-        
-        const remainingHours = totalHours - hoursToAdd;
-        
-        setFieldTimers(prev => ({
-          ...prev,
-          [fieldId]: {
-            seconds: 0,
-            accumulated: remainingHours,
-            running: false
-          }
-        }));
-        
-        saveTimerState(fieldId, 0, remainingHours, false);
       } catch (error) {
         console.error('Error updating time spent:', error);
       }
     } else {
-      setFieldTimers(prev => ({
-        ...prev,
-        [fieldId]: {
-          ...timer,
-          running: false
-        }
-      }));
-      
-      saveTimerState(fieldId, timer.seconds, timer.accumulated, false);
+      saveTimerState(fieldId, 0, totalHours, false);
     }
     
-    // Clear interval if no timers running
-    const hasRunningTimer = Object.values(fieldTimers).some(t => t?.running && t !== timer);
+    // Clear interval if no timers are running
+    const hasRunningTimer = Object.values(updatedFieldTimers).some(t => t?.running);
     if (!hasRunningTimer && timerIntervalRef.current) {
       clearInterval(timerIntervalRef.current);
       timerIntervalRef.current = null;
@@ -676,9 +782,14 @@ const DreamBuilderDashboard = () => {
     };
     const handleOffline = () => setIsOnline(false);
     
+    // Mark that timers are being initialized
+    window.timerInitialized = false;
+    
     initializeApp();
     
-
+    // After initialization, mark as initialized
+    window.timerInitialized = true;
+    
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
     
@@ -687,6 +798,10 @@ const DreamBuilderDashboard = () => {
     return () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
+      clearInterval(syncInterval);
+      if (timerIntervalRef.current) {
+        clearInterval(timerIntervalRef.current);
+      }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -977,12 +1092,21 @@ const DreamBuilderDashboard = () => {
                 </div>
               </div>
 
-              <div style={{ gridColumn: isMobile ? 'span 1' : 'span 2', backgroundColor: '#1a1a1a', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '16px', padding: '16px' }}>
+              {/* Done stat card - now shows today's completed count */}
+              <div style={{ 
+                gridColumn: isMobile ? 'span 1' : 'span 2', 
+                backgroundColor: '#1a1a1a', 
+                border: '1px solid rgba(255, 255, 255, 0.1)', 
+                borderRadius: '16px', 
+                padding: '16px' 
+              }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
                   <CheckCircle2 size={16} color="#dc2626" />
-                  <div style={{ color: '#6b7280', fontSize: '12px' }}>Done</div>
+                  <div style={{ color: '#6b7280', fontSize: '12px' }}>Done Today</div>
                 </div>
-                <div style={{ fontSize: '28px', fontWeight: 'bold' }}>{currentField.milestones}</div>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
+                  <div style={{ fontSize: '28px', fontWeight: 'bold' }}>{todayCompletedCount}</div>
+                </div>
               </div>
 
               <div style={{ gridColumn: isMobile ? 'span 1' : 'span 2', backgroundColor: '#1a1a1a', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '16px', padding: '16px' }}>
@@ -1060,47 +1184,124 @@ const DreamBuilderDashboard = () => {
                   overflowY: 'auto',
                   paddingRight: '4px' 
                 }}>
-                  {nextSteps.map((step, idx) => (
-                    <div key={idx} style={{
-                      display: 'flex', alignItems: 'center', gap: '12px',
-                      backgroundColor: 'rgba(255, 255, 255, 0.05)', borderRadius: '12px', padding: '12px 16px'
-                    }}>
-                      <div style={{
-                        width: '24px', height: '24px', borderRadius: '6px',
-                        backgroundColor: 'rgba(220, 38, 38, 0.2)', border: '1px solid rgba(220, 38, 38, 0.3)',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        fontSize: '12px', fontWeight: 'bold', flexShrink: 0
+                  {nextSteps.map((step, idx) => {
+                    const isChecked = checkedSteps[idx]?.checked;
+                    const checkDate = checkedSteps[idx]?.date;
+                    const today = getTodayString();
+                    const canUndo = isChecked && checkDate === today;
+                    
+                    return (
+                      <div key={idx} style={{
+                        display: 'flex', alignItems: 'center', gap: '12px',
+                        backgroundColor: isChecked ? 'rgba(34, 197, 94, 0.1)' : 'rgba(255, 255, 255, 0.05)', 
+                        borderRadius: '12px', 
+                        padding: '12px 16px',
+                        border: isChecked ? '1px solid rgba(34, 197, 94, 0.3)' : 'none',
+                        transition: 'all 0.2s'
                       }}>
-                        {idx + 1}
-                      </div>
-                      
-                      <div style={{ flex: 1 }}>
-                        <EditableText
-                          value={step}
-                          onSave={(newValue) => updateNextStep(idx, newValue)}
-                        />
-                      </div>
+                        {/* Checkbox - make it toggleable */}
+                        <button
+                          onClick={() => isChecked ? handleUncheckStep(idx) : handleCheckStep(idx)}
+                          disabled={isChecked && !canUndo}
+                          style={{
+                            width: '24px',
+                            height: '24px',
+                            borderRadius: '6px',
+                            backgroundColor: isChecked ? 'rgba(34, 197, 94, 0.3)' : 'transparent',
+                            border: isChecked ? '2px solid #22c55e' : '2px solid rgba(255, 255, 255, 0.3)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            cursor: (isChecked && !canUndo) ? 'not-allowed' : 'pointer',
+                            flexShrink: 0,
+                            transition: 'all 0.2s',
+                            opacity: (isChecked && !canUndo) ? 0.5 : 1
+                          }}
+                        >
+                          {isChecked && <CheckCircle2 size={16} color="#22c55e" />}
+                        </button>
+                        
+                        <div style={{
+                          width: '24px', height: '24px', borderRadius: '6px',
+                          backgroundColor: 'rgba(220, 38, 38, 0.2)', 
+                          border: '1px solid rgba(220, 38, 38, 0.3)',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          fontSize: '12px', fontWeight: 'bold', flexShrink: 0
+                        }}>
+                          {idx + 1}
+                        </div>
+                        
+                        <div style={{ 
+                          flex: 1,
+                          textDecoration: isChecked ? 'line-through' : 'none',
+                          opacity: isChecked ? 0.6 : 1
+                        }}>
+                          <EditableText
+                            value={step}
+                            onSave={(newValue) => updateNextStep(idx, newValue)}
+                          />
+                        </div>
 
-                      <button
-                        onClick={() => deleteNextStep(idx)}
-                        style={{
-                          padding: '8px',
-                          backgroundColor: 'transparent',
-                          border: 'none',
-                          color: '#6b7280',
-                          cursor: 'pointer',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          transition: 'color 0.2s'
-                        }}
-                        onMouseEnter={(e) => e.currentTarget.style.color = '#ef4444'}
-                        onMouseLeave={(e) => e.currentTarget.style.color = '#6b7280'}
-                      >
-                        <X size={18} />
-                      </button>
-                    </div>
-                  ))}
+                        {/* Undo button - only shows if checked today */}
+                        {canUndo && (
+                          <button
+                            onClick={() => handleUncheckStep(idx)}
+                            style={{
+                              padding: '6px 12px',
+                              backgroundColor: 'rgba(234, 179, 8, 0.2)',
+                              border: '1px solid rgba(234, 179, 8, 0.3)',
+                              borderRadius: '6px',
+                              color: '#eab308',
+                              cursor: 'pointer',
+                              fontSize: '12px',
+                              fontWeight: 600,
+                              transition: 'all 0.2s'
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.backgroundColor = 'rgba(234, 179, 8, 0.3)';
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.backgroundColor = 'rgba(234, 179, 8, 0.2)';
+                            }}
+                          >
+                            Undo
+                          </button>
+                        )}
+
+                        {/* Date badge for completed items from previous days */}
+                        {isChecked && !canUndo && (
+                          <span style={{
+                            fontSize: '11px',
+                            color: '#6b7280',
+                            backgroundColor: 'rgba(255, 255, 255, 0.05)',
+                            padding: '4px 8px',
+                            borderRadius: '4px'
+                          }}>
+                            {checkDate}
+                          </span>
+                        )}
+
+                        <button
+                          onClick={() => deleteNextStep(idx)}
+                          style={{
+                            padding: '8px',
+                            backgroundColor: 'transparent',
+                            border: 'none',
+                            color: '#6b7280',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            transition: 'color 0.2s'
+                          }}
+                          onMouseEnter={(e) => e.currentTarget.style.color = '#ef4444'}
+                          onMouseLeave={(e) => e.currentTarget.style.color = '#6b7280'}
+                        >
+                          <X size={18} />
+                        </button>
+                      </div>
+                    );
+                  })}
 
                   {nextSteps.length === 0 && (
                     <div style={{ color: '#6b7280', textAlign: 'center', padding: '32px' }}>
