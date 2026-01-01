@@ -1,161 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Target, Clock, TrendingUp, CheckCircle2, Menu, X, Flame, Calendar, Wifi, WifiOff, RefreshCw, Play, Pause, Square } from 'lucide-react';
-
-
-
-const apiService = {
-  initialize: async () => {
-    // Load from localStorage if exists
-    const stored = localStorage.getItem('dreamBuilderData');
-    if (!stored) {
-      // Initialize with default data
-      const defaultData = {
-        overall: {
-          id: 'overall',
-          name: 'Overall',
-          icon: '🎯',
-          goal: 'Become the best version of myself',
-          progress: 0,
-          timeSpent: 0,
-          milestones: 0,
-          streak: 0,
-          nextSteps: []
-        },
-        business: {
-          id: 'business',
-          name: 'Business',
-          icon: '💼',
-          goal: 'Make a $1,000,000',
-          progress: 25,
-          timeSpent: 120,
-          milestones: 5,
-          streak: 12,
-          nextSteps: ['Get resort client', 'Find business thesis idea']
-        },
-        tech: {
-            id: 'tech',
-            name: 'Tech',
-            icon: '⚡',
-            progress: 0,
-            timeSpent: 0,
-            goal: 'Master full-stack development',
-            nextSteps: [
-              'Develop Fullstack App',
-              'Find Full-time Gig',
-              'Learn system design',
-              'Master TypeScript'
-            ],
-            milestones: 0,
-            streak: 0,
-            synced: true
-        },
-        physical: {
-            id: 'physical',
-            name: 'Physical',
-            icon: '💪',
-            progress: 0,
-            timeSpent: 0,
-            goal: 'Run a half marathon',
-            nextSteps: [
-              'Increase weekly mileage to 30km',
-              'Add strength training 2x/week',
-              'Join running club',
-              'Focus on nutrition'
-            ],
-            milestones: 0,
-            streak: 0,
-            synced: true
-        },
-        social: {
-            id: 'social',
-            name: 'Social',
-            icon: '🤝',
-            progress: 0,
-            timeSpent: 0,
-            goal: 'Build meaningful connections',
-            nextSteps: [
-              'Attend 2 networking events/month',
-              'Schedule coffee chats weekly',
-              'Join community group',
-              'Host a small gathering'
-            ],
-            milestones: 0,
-            streak: 0,
-            synced: true
-        },
-        misc: {
-            id: 'misc',
-            name: 'Misc',
-            icon: '✨',
-            progress: 0,
-            timeSpent: 0,
-            goal: 'Creative expression & hobbies',
-            nextSteps: [
-              'Practice guitar 3x/week',
-              'Start photography course',
-              'Read 2 books/month',
-              'Write in journal daily'
-            ],
-            milestones: 0,
-            streak: 0,
-            synced: true
-        }
-      };
-      localStorage.setItem('dreamBuilderData', JSON.stringify(defaultData));
-    }
-  },
-  
-  fetchFields: async () => {
-    const stored = localStorage.getItem('dreamBuilderData');
-    return stored ? JSON.parse(stored) : {};
-  },
-  
-  updateProgress: async (fieldId, newProgress) => {
-    const data = JSON.parse(localStorage.getItem('dreamBuilderData'));
-    data[fieldId].progress = newProgress;
-    localStorage.setItem('dreamBuilderData', JSON.stringify(data));
-  },
-  
-  updateGoal: async (fieldId, newGoal) => {
-    const data = JSON.parse(localStorage.getItem('dreamBuilderData'));
-    data[fieldId].goal = newGoal;
-    localStorage.setItem('dreamBuilderData', JSON.stringify(data));
-  },
-  
-  updateNextSteps: async (fieldId, nextSteps) => {
-    const data = JSON.parse(localStorage.getItem('dreamBuilderData'));
-    data[fieldId].nextSteps = nextSteps;
-    localStorage.setItem('dreamBuilderData', JSON.stringify(data));
-  },
-  
-  addNextStep: async (fieldId, step) => {
-    const data = JSON.parse(localStorage.getItem('dreamBuilderData'));
-    data[fieldId].nextSteps.push(step);
-    localStorage.setItem('dreamBuilderData', JSON.stringify(data));
-  },
-  
-  addTimeSpent: async (fieldId, hours) => {
-    const data = JSON.parse(localStorage.getItem('dreamBuilderData'));
-    data[fieldId].timeSpent += hours;
-    localStorage.setItem('dreamBuilderData', JSON.stringify(data));
-  },
-
-  // Add these to your apiService object
-  updateStreak: async (fieldId, newStreak) => {
-    const data = JSON.parse(localStorage.getItem('dreamBuilderData'));
-    data[fieldId].streak = newStreak;
-    localStorage.setItem('dreamBuilderData', JSON.stringify(data));
-  },
-
-  updateMilestones: async (fieldId, newMilestones) => {
-    const data = JSON.parse(localStorage.getItem('dreamBuilderData'));
-    data[fieldId].milestones = newMilestones;
-    localStorage.setItem('dreamBuilderData', JSON.stringify(data));
-  },
-  
-  getUnsyncedCount: async () => 0,
-  syncOfflineData: async () => {}
-};
+import { supabaseService } from '../services/supabaseService.js'; 
 
 const EditableText = ({ value, onSave }) => {
   const [isEditing, setIsEditing] = useState(false);
@@ -206,6 +51,213 @@ const EditableText = ({ value, onSave }) => {
     </div>
   );
 };
+
+const apiService = {
+  initialize: async () => {
+    // Check if user is authenticated
+    const isAuth = await supabaseService.isAuthenticated()
+    
+    if (isAuth) {
+      // Try to load from Supabase first
+      const supabaseData = await supabaseService.loadFromSupabase()
+      
+      if (supabaseData) {
+        localStorage.setItem('dreamBuilderData', JSON.stringify(supabaseData))
+        return
+      }
+    }
+    
+    // Fallback to localStorage initialization (your existing code)
+    const stored = localStorage.getItem('dreamBuilderData')
+    if (!stored) {
+      const defaultData = {
+        overall: {
+          id: 'overall',
+          name: 'Overall',
+          icon: '🎯',
+          goal: 'Become the best version of myself',
+          progress: 0,
+          timeSpent: 0,
+          milestones: 0,
+          streak: 0,
+          nextSteps: []
+        },
+        business: {
+          id: 'business',
+          name: 'Business',
+          icon: '💼',
+          goal: 'Make a $1,000,000',
+          progress: 25,
+          timeSpent: 120,
+          milestones: 5,
+          streak: 12,
+          nextSteps: ['Get resort client', 'Find business thesis idea']
+        },
+        tech: {
+          id: 'tech',
+          name: 'Tech',
+          icon: '⚡',
+          progress: 0,
+          timeSpent: 0,
+          goal: 'Master full-stack development',
+          nextSteps: [
+            'Develop Fullstack App',
+            'Find Full-time Gig',
+            'Learn system design',
+            'Master TypeScript'
+          ],
+          milestones: 0,
+          streak: 0,
+          synced: true
+        },
+        physical: {
+          id: 'physical',
+          name: 'Physical',
+          icon: '💪',
+          progress: 0,
+          timeSpent: 0,
+          goal: 'Run a half marathon',
+          nextSteps: [
+            'Increase weekly mileage to 30km',
+            'Add strength training 2x/week',
+            'Join running club',
+            'Focus on nutrition'
+          ],
+          milestones: 0,
+          streak: 0,
+          synced: true
+        },
+        social: {
+          id: 'social',
+          name: 'Social',
+          icon: '🤝',
+          progress: 0,
+          timeSpent: 0,
+          goal: 'Build meaningful connections',
+          nextSteps: [
+            'Attend 2 networking events/month',
+            'Schedule coffee chats weekly',
+            'Join community group',
+            'Host a small gathering'
+          ],
+          milestones: 0,
+          streak: 0,
+          synced: true
+        },
+        misc: {
+          id: 'misc',
+          name: 'Misc',
+          icon: '✨',
+          progress: 0,
+          timeSpent: 0,
+          goal: 'Creative expression & hobbies',
+          nextSteps: [
+            'Practice guitar 3x/week',
+            'Start photography course',
+            'Read 2 books/month',
+            'Write in journal daily'
+          ],
+          milestones: 0,
+          streak: 0,
+          synced: true
+        }
+      }
+      localStorage.setItem('dreamBuilderData', JSON.stringify(defaultData))
+    }
+  },
+  
+  fetchFields: async () => {
+    const stored = localStorage.getItem('dreamBuilderData')
+    return stored ? JSON.parse(stored) : {}
+  },
+  
+  updateProgress: async (fieldId, newProgress) => {
+    const data = JSON.parse(localStorage.getItem('dreamBuilderData'))
+    data[fieldId].progress = newProgress
+    localStorage.setItem('dreamBuilderData', JSON.stringify(data))
+    
+    // Sync to Supabase if authenticated
+    const isAuth = await supabaseService.isAuthenticated()
+    if (isAuth) {
+      await supabaseService.syncToSupabase(data)
+    }
+  },
+  
+  updateGoal: async (fieldId, newGoal) => {
+    const data = JSON.parse(localStorage.getItem('dreamBuilderData'))
+    data[fieldId].goal = newGoal
+    localStorage.setItem('dreamBuilderData', JSON.stringify(data))
+    
+    const isAuth = await supabaseService.isAuthenticated()
+    if (isAuth) {
+      await supabaseService.syncToSupabase(data)
+    }
+  },
+  
+  updateNextSteps: async (fieldId, nextSteps) => {
+    const data = JSON.parse(localStorage.getItem('dreamBuilderData'))
+    data[fieldId].nextSteps = nextSteps
+    localStorage.setItem('dreamBuilderData', JSON.stringify(data))
+    
+    const isAuth = await supabaseService.isAuthenticated()
+    if (isAuth) {
+      await supabaseService.syncToSupabase(data)
+    }
+  },
+  
+  addNextStep: async (fieldId, step) => {
+    const data = JSON.parse(localStorage.getItem('dreamBuilderData'))
+    data[fieldId].nextSteps.push(step)
+    localStorage.setItem('dreamBuilderData', JSON.stringify(data))
+    
+    const isAuth = await supabaseService.isAuthenticated()
+    if (isAuth) {
+      await supabaseService.syncToSupabase(data)
+    }
+  },
+  
+  addTimeSpent: async (fieldId, hours) => {
+    const data = JSON.parse(localStorage.getItem('dreamBuilderData'))
+    data[fieldId].timeSpent += hours
+    localStorage.setItem('dreamBuilderData', JSON.stringify(data))
+    
+    const isAuth = await supabaseService.isAuthenticated()
+    if (isAuth) {
+      await supabaseService.syncToSupabase(data)
+    }
+  },
+
+  updateStreak: async (fieldId, newStreak) => {
+    const data = JSON.parse(localStorage.getItem('dreamBuilderData'))
+    data[fieldId].streak = newStreak
+    localStorage.setItem('dreamBuilderData', JSON.stringify(data))
+    
+    const isAuth = await supabaseService.isAuthenticated()
+    if (isAuth) {
+      await supabaseService.syncToSupabase(data)
+    }
+  },
+
+  updateMilestones: async (fieldId, newMilestones) => {
+    const data = JSON.parse(localStorage.getItem('dreamBuilderData'))
+    data[fieldId].milestones = newMilestones
+    localStorage.setItem('dreamBuilderData', JSON.stringify(data))
+    
+    const isAuth = await supabaseService.isAuthenticated()
+    if (isAuth) {
+      await supabaseService.syncToSupabase(data)
+    }
+  },
+  
+  getUnsyncedCount: async () => 0,
+  syncOfflineData: async () => {
+    const isAuth = await supabaseService.isAuthenticated()
+    if (isAuth) {
+      const data = JSON.parse(localStorage.getItem('dreamBuilderData'))
+      await supabaseService.syncToSupabase(data)
+    }
+  }
+}
 
 const DreamBuilderDashboard = () => {
   const isMobile = window.innerWidth < 768;
