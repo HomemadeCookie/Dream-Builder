@@ -9,6 +9,23 @@ export default function AuthScreen() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
+ 
+  const createDefaultAreas = async (userId) => {
+    console.log('Creating default areas for user:', userId)
+    
+    // Call the database function that bypasses RLS
+    const { error } = await supabase.rpc('create_user_default_areas', {
+      user_id_param: userId
+    })
+
+    if (error) {
+      console.error('Error creating default areas:', error)
+      throw new Error('Failed to create areas: ' + error.message)
+    }
+
+    console.log('Default areas created successfully')
+  }
+
   const handleSubmit = async (e) => {
     e.preventDefault()
     setLoading(true)
@@ -23,7 +40,7 @@ export default function AuthScreen() {
         if (error) throw error
       } else {
         // Sign up
-        const { data, error } = await supabase.auth.signUp({
+        const { data: authData, error: signUpError } = await supabase.auth.signUp({
           email,
           password,
           options: {
@@ -31,23 +48,56 @@ export default function AuthScreen() {
           }
         })
         
-        if (error) throw error
+        if (signUpError) throw signUpError
         
-        if (data.user) {
-          // Create profile
-          await supabase.from('profiles').insert({
-            id: data.user.id,
-            username,
-            display_name: username
-          })
+        if (authData.user) {
+          console.log('User created:', authData.user.id)
           
-          // Create default privacy settings
-          await supabase.from('privacy_settings').insert({
-            user_id: data.user.id
-          })
+          // Wait a bit for auth to fully process
+          await new Promise(resolve => setTimeout(resolve, 1000))
+          
+          try {
+            // Create profile
+            const { error: profileError } = await supabase.from('profiles').insert({
+              id: authData.user.id,
+              username,
+              display_name: username
+            })
+            
+            if (profileError) {
+              console.error('Profile error:', profileError)
+              throw new Error('Failed to create profile: ' + profileError.message)
+            }
+            
+            console.log('Profile created')
+            
+            // Create default privacy settings
+            const { error: privacyError } = await supabase.from('privacy_settings').insert({
+              user_id: authData.user.id
+            })
+            
+            if (privacyError) {
+              console.error('Privacy error:', privacyError)
+              throw new Error('Failed to create privacy settings: ' + privacyError.message)
+            }
+            
+            console.log('Privacy settings created')
+
+            // Create default areas and next steps
+            await createDefaultAreas(authData.user.id)
+            
+            console.log('Setup complete!')
+            
+          } catch (setupError) {
+            // If setup fails, delete the auth user to allow retry
+            console.error('Setup failed, cleaning up:', setupError)
+            await supabase.auth.admin.deleteUser(authData.user.id).catch(() => {})
+            throw setupError
+          }
         }
       }
     } catch (error) {
+      console.error('Auth error:', error)
       setError(error.message)
     } finally {
       setLoading(false)

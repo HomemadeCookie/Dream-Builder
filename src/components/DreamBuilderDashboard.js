@@ -52,6 +52,131 @@ const EditableText = ({ value, onSave }) => {
   );
 };
 
+// Add this component near the top of the file, after EditableText
+const RadarChart = ({ data }) => {
+  const canvasRef = useRef(null);
+  
+  useEffect(() => {
+    if (!canvasRef.current) return;
+    
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d');
+    const centerX = canvas.width / 2;
+    const centerY = canvas.height / 2;
+    const maxRadius = Math.min(centerX, centerY) - 40;
+    const sides = data.length;
+    const angleStep = (Math.PI * 2) / sides;
+    
+    // Clear canvas
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    // Find max value for scaling
+    const maxValue = Math.max(...data.map(d => d.value), 10);
+    
+    // 1. Draw Background Pentagon Grid
+    const levels = 5;
+    ctx.lineWidth = 1;
+    for (let i = levels; i > 0; i--) {
+      const radius = (maxRadius / levels) * i;
+      ctx.beginPath();
+      for (let j = 0; j <= sides; j++) {
+        const angle = angleStep * j - Math.PI / 2;
+        const x = centerX + Math.cos(angle) * radius;
+        const y = centerY + Math.sin(angle) * radius;
+        if (j === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+      ctx.stroke();
+    }
+    
+    // 2. Draw Axes and Icons
+    data.forEach((item, index) => {
+      const angle = angleStep * index - Math.PI / 2;
+      const x = centerX + Math.cos(angle) * maxRadius;
+      const y = centerY + Math.sin(angle) * maxRadius;
+      
+      // Axis Line
+      ctx.beginPath();
+      ctx.moveTo(centerX, centerY);
+      ctx.lineTo(x, y);
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+      ctx.stroke();
+      
+      // Icon Only
+      const iconDistance = maxRadius + 25;
+      const iconX = centerX + Math.cos(angle) * iconDistance;
+      const iconY = centerY + Math.sin(angle) * iconDistance;
+      
+      ctx.font = '24px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(item.icon, iconX, iconY);
+    });
+    
+    // 3. Draw Data Polygon
+    ctx.beginPath();
+    data.forEach((item, index) => {
+      const angle = angleStep * index - Math.PI / 2;
+      const value = Math.min(item.value, maxValue);
+      const radius = (value / maxValue) * maxRadius;
+      const x = centerX + Math.cos(angle) * radius;
+      const y = centerY + Math.sin(angle) * radius;
+      
+      if (index === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    });
+    ctx.closePath();
+    
+    // Fill with Raycast Red Gradient
+    const gradient = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, maxRadius);
+    gradient.addColorStop(0, 'rgba(255, 78, 78, 0.3)');
+    gradient.addColorStop(1, 'rgba(255, 78, 78, 0.05)');
+    ctx.fillStyle = gradient;
+    ctx.fill();
+    
+    // Sharp Red Stroke
+    ctx.strokeStyle = '#ff4e4e';
+    ctx.lineWidth = 2;
+    ctx.lineJoin = 'round';
+    ctx.stroke();
+    
+    // 4. Draw Glow Points
+    data.forEach((item, index) => {
+      const angle = angleStep * index - Math.PI / 2;
+      const value = Math.min(item.value, maxValue);
+      const radius = (value / maxValue) * maxRadius;
+      const x = centerX + Math.cos(angle) * radius;
+      const y = centerY + Math.sin(angle) * radius;
+      
+      ctx.beginPath();
+      ctx.arc(x, y, 3, 0, Math.PI * 2);
+      ctx.fillStyle = '#ff4e4e';
+      ctx.shadowBlur = 10;
+      ctx.shadowColor = '#ff4e4e';
+      ctx.fill();
+      ctx.shadowBlur = 0; // Reset shadow for other elements
+    });
+    
+  }, [data]);
+  
+  return (
+    <div style={{ 
+      background: '#000', 
+      padding: '20px', 
+      borderRadius: '24px',
+      border: '1px solid #262626'
+    }}>
+      <canvas 
+        ref={canvasRef} 
+        width={400} 
+        height={400}
+        style={{ width: '100%', height: 'auto', maxWidth: '400px' }}
+      />
+    </div>
+  );
+};
+
 const apiService = {
   initialize: async () => {
     // Check if user is authenticated
@@ -1044,76 +1169,124 @@ const DreamBuilderDashboard = () => {
 
             {/* Conditional rendering: Overall tab vs Individual field tab */}
             {selectedField === 'overall' ? (
-              // OVERALL TAB CONTENT
-              <div style={{ 
-                display: 'grid',
-                gridTemplateColumns: isMobile ? '1fr' : 'repeat(12, 1fr)',
-                gap: isMobile ? '12px' : '16px',
-                gridAutoRows: isMobile ? 'auto' : '140px'
+            // OVERALL TAB CONTENT
+            <div style={{ 
+              display: 'grid',
+              gridTemplateColumns: isMobile ? '1fr' : 'repeat(12, 1fr)',
+              gap: isMobile ? '12px' : '16px',
+              gridAutoRows: isMobile ? 'auto' : '140px'
+            }}>
+              {/* Overall Stats Summary - UPDATE THIS SECTION */}
+              <div style={{
+                gridColumn: isMobile ? 'span 1' : 'span 12',
+                gridRow: 'span 2',
+                background: 'linear-gradient(to bottom right, rgba(220, 38, 38, 0.15), rgba(225, 29, 72, 0.15))',
+                border: '1px solid rgba(220, 38, 38, 0.3)',
+                borderRadius: '24px',
+                padding: '32px'
               }}>
-                {/* Overall Stats Summary */}
-                <div style={{
-                  gridColumn: isMobile ? 'span 1' : 'span 12',
-                  gridRow: 'span 2',
-                  background: 'linear-gradient(to bottom right, rgba(220, 38, 38, 0.15), rgba(225, 29, 72, 0.15))',
-                  border: '1px solid rgba(220, 38, 38, 0.3)',
-                  borderRadius: '24px',
-                  padding: '32px'
-                }}>
-                  <h2 style={{ fontSize: '24px', fontWeight: 'bold', marginBottom: '24px' }}>Your Journey Overview</h2>
-                  
-                  <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)', gap: '24px' }}>
-                    {/* Average Progress */}
-                    <div style={{ 
-                      backgroundColor: 'rgba(0, 0, 0, 0.3)', 
-                      padding: '24px', 
-                      borderRadius: '16px',
-                      border: '1px solid rgba(255, 255, 255, 0.1)'
-                    }}>
-                      <div style={{ color: '#9ca3af', fontSize: '14px', marginBottom: '8px' }}>Average Progress</div>
-                      <div style={{ fontSize: '48px', fontWeight: 'bold', marginBottom: '12px' }}>
-                        {calculateOverallMetrics(fields).progress}%
-                      </div>
-                      <div style={{ width: '100%', height: '8px', backgroundColor: 'rgba(255, 255, 255, 0.1)', borderRadius: '999px', overflow: 'hidden' }}>
-                        <div style={{
-                          height: '100%',
-                          width: `${calculateOverallMetrics(fields).progress}%`,
-                          background: 'linear-gradient(to right, #dc2626, #e11d48)',
-                          transition: 'width 0.3s ease'
-                        }} />
-                      </div>
+                <h2 style={{ fontSize: '24px', fontWeight: 'bold', marginBottom: '24px' }}>Your Journey Overview</h2>
+                
+                <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)', gap: '24px' }}>
+                  {/* Average Progress */}
+                  <div style={{ 
+                    backgroundColor: 'rgba(0, 0, 0, 0.3)', 
+                    padding: '24px', 
+                    borderRadius: '16px',
+                    border: '1px solid rgba(255, 255, 255, 0.1)'
+                  }}>
+                    <div style={{ color: '#9ca3af', fontSize: '14px', marginBottom: '8px' }}>Average Progress</div>
+                    <div style={{ fontSize: '48px', fontWeight: 'bold', marginBottom: '12px' }}>
+                      {calculateOverallMetrics(fields).progress}%
                     </div>
-
-                    {/* Total Time */}
-                    <div style={{ 
-                      backgroundColor: 'rgba(0, 0, 0, 0.3)', 
-                      padding: '24px', 
-                      borderRadius: '16px',
-                      border: '1px solid rgba(255, 255, 255, 0.1)'
-                    }}>
-                      <div style={{ color: '#9ca3af', fontSize: '14px', marginBottom: '8px' }}>Total Time Invested</div>
-                      <div style={{ fontSize: '48px', fontWeight: 'bold' }}>
-                        {calculateOverallMetrics(fields).timeSpent}
-                      </div>
-                      <div style={{ color: '#6b7280', fontSize: '14px' }}>hours across all fields</div>
-                    </div>
-
-                    {/* Minimum Streak */}
-                    <div style={{ 
-                      backgroundColor: 'rgba(0, 0, 0, 0.3)', 
-                      padding: '24px', 
-                      borderRadius: '16px',
-                      border: '1px solid rgba(255, 255, 255, 0.1)'
-                    }}>
-                      <div style={{ color: '#9ca3af', fontSize: '14px', marginBottom: '8px' }}>Consistency Streak</div>
-                      <div style={{ fontSize: '48px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <Flame size={40} color="#dc2626" />
-                        {calculateOverallMetrics(fields).streak}
-                      </div>
-                      <div style={{ color: '#6b7280', fontSize: '14px' }}>days minimum across fields</div>
+                    <div style={{ width: '100%', height: '8px', backgroundColor: 'rgba(255, 255, 255, 0.1)', borderRadius: '999px', overflow: 'hidden' }}>
+                      <div style={{
+                        height: '100%',
+                        width: `${calculateOverallMetrics(fields).progress}%`,
+                        background: 'linear-gradient(to right, #dc2626, #e11d48)',
+                        transition: 'width 0.3s ease'
+                      }} />
                     </div>
                   </div>
+
+                  {/* Total Time */}
+                  <div style={{ 
+                    backgroundColor: 'rgba(0, 0, 0, 0.3)', 
+                    padding: '24px', 
+                    borderRadius: '16px',
+                    border: '1px solid rgba(255, 255, 255, 0.1)'
+                  }}>
+                    <div style={{ color: '#9ca3af', fontSize: '14px', marginBottom: '8px' }}>Total Time Invested</div>
+                    <div style={{ fontSize: '48px', fontWeight: 'bold' }}>
+                      {calculateOverallMetrics(fields).timeSpent}
+                    </div>
+                    <div style={{ color: '#6b7280', fontSize: '14px' }}>hours across all fields</div>
+                  </div>
+
+                  {/* Minimum Streak */}
+                  <div style={{ 
+                    backgroundColor: 'rgba(0, 0, 0, 0.3)', 
+                    padding: '24px', 
+                    borderRadius: '16px',
+                    border: '1px solid rgba(255, 255, 255, 0.1)'
+                  }}>
+                    <div style={{ color: '#9ca3af', fontSize: '14px', marginBottom: '8px' }}>Consistency Streak</div>
+                    <div style={{ fontSize: '48px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <Flame size={40} color="#dc2626" />
+                      {calculateOverallMetrics(fields).streak}
+                    </div>
+                    <div style={{ color: '#6b7280', fontSize: '14px' }}>days minimum across fields</div>
+                  </div>
                 </div>
+              </div>
+
+              {/* ADD THIS NEW RADAR CHART SECTION */}
+              <div style={{
+                gridColumn: isMobile ? 'span 1' : 'span 12',
+                gridRow: 'span 3',
+                backgroundColor: '#1a1a1a',
+                border: '1px solid rgba(255, 255, 255, 0.1)',
+                borderRadius: '24px',
+                padding: '32px',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center'
+              }}>
+                <h2 style={{ fontSize: '24px', fontWeight: 'bold', marginBottom: '8px' }}>Time Distribution</h2>
+                <p style={{ color: '#6b7280', fontSize: '14px', marginBottom: '32px' }}>
+                  Hours invested across all areas
+                </p>
+                
+                <RadarChart 
+                  data={[
+                    { 
+                      label: 'Business', 
+                      icon: fields.business?.icon || '💼', 
+                      value: fields.business?.timeSpent || 0 
+                    },
+                    { 
+                      label: 'Tech', 
+                      icon: fields.tech?.icon || '⚡', 
+                      value: fields.tech?.timeSpent || 0 
+                    },
+                    { 
+                      label: 'Physical', 
+                      icon: fields.physical?.icon || '💪', 
+                      value: fields.physical?.timeSpent || 0 
+                    },
+                    { 
+                      label: 'Social', 
+                      icon: fields.social?.icon || '🤝', 
+                      value: fields.social?.timeSpent || 0 
+                    },
+                    { 
+                      label: 'Misc', 
+                      icon: fields.misc?.icon || '✨', 
+                      value: fields.misc?.timeSpent || 0 
+                    }
+                  ]} 
+                />
+              </div>
 
                 {/* Individual Field Breakdown */}
                 <div style={{

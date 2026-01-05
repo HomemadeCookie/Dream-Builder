@@ -163,5 +163,20 @@ export const supabaseService = {
       console.error('Error loading from Supabase:', error)
       return null
     }
+  },
+  sendFriendRequest: async (friendId) => {
+    const { data: { user } } = await supabase.auth.getUser(); // 
+    if (!user) return null;
+
+    const { data, error } = await supabase
+      .from('friendships')
+      .insert({
+        user_id: user.id,
+        friend_id: friendId,
+        status: 'pending' // Initial status for new requests
+      });
+
+    if (error) throw error;
+    return data;
   }
 }
