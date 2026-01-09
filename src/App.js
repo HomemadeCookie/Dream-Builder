@@ -46,7 +46,7 @@ function App() {
         position: 'fixed',
         bottom: '20px',
         right: '20px',
-        zIndex: 100,
+        zIndex: 1000,
         display: 'flex',
         gap: '12px'
       }}>

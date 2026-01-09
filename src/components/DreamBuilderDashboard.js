@@ -1,6 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Target, Clock, TrendingUp, CheckCircle2, Menu, X, Flame, Calendar, Wifi, WifiOff, RefreshCw, Play, Pause, Square } from 'lucide-react';
 import { supabaseService } from '../services/supabaseService.js'; 
+import { offlineService } from '../services/offlineService.js';
+import { supabase } from '../lib/supabase.js';
+import ExpandableTask from './ExpandableTask.js';
 
 const EditableText = ({ value, onSave }) => {
   const [isEditing, setIsEditing] = useState(false);
@@ -177,131 +180,147 @@ const RadarChart = ({ data }) => {
   );
 };
 
+// Replace the apiService in DreamBuilderDashboard.js with this:
+// Import at the top: import { offlineService } from '../services/offlineService.js'
+
 const apiService = {
   initialize: async () => {
-    // Check if user is authenticated
-    const isAuth = await supabaseService.isAuthenticated()
-    
-    if (isAuth) {
-      // Try to load from Supabase first
-      const supabaseData = await supabaseService.loadFromSupabase()
+    try {
+      const isAuth = await supabaseService.isAuthenticated()
       
-      if (supabaseData) {
-        localStorage.setItem('dreamBuilderData', JSON.stringify(supabaseData))
-        return
-      }
-    }
-    
-    // Fallback to localStorage initialization (your existing code)
-    const stored = localStorage.getItem('dreamBuilderData')
-    if (!stored) {
-      const defaultData = {
-        overall: {
-          id: 'overall',
-          name: 'Overall',
-          icon: '🎯',
-          goal: 'Become the best version of myself',
-          progress: 0,
-          timeSpent: 0,
-          milestones: 0,
-          streak: 0,
-          nextSteps: []
-        },
-        business: {
-          id: 'business',
-          name: 'Business',
-          icon: '💼',
-          goal: 'Make a $1,000,000',
-          progress: 25,
-          timeSpent: 120,
-          milestones: 5,
-          streak: 12,
-          nextSteps: ['Get resort client', 'Find business thesis idea']
-        },
-        tech: {
-          id: 'tech',
-          name: 'Tech',
-          icon: '⚡',
-          progress: 0,
-          timeSpent: 0,
-          goal: 'Master full-stack development',
-          nextSteps: [
-            'Develop Fullstack App',
-            'Find Full-time Gig',
-            'Learn system design',
-            'Master TypeScript'
-          ],
-          milestones: 0,
-          streak: 0,
-          synced: true
-        },
-        physical: {
-          id: 'physical',
-          name: 'Physical',
-          icon: '💪',
-          progress: 0,
-          timeSpent: 0,
-          goal: 'Run a half marathon',
-          nextSteps: [
-            'Increase weekly mileage to 30km',
-            'Add strength training 2x/week',
-            'Join running club',
-            'Focus on nutrition'
-          ],
-          milestones: 0,
-          streak: 0,
-          synced: true
-        },
-        social: {
-          id: 'social',
-          name: 'Social',
-          icon: '🤝',
-          progress: 0,
-          timeSpent: 0,
-          goal: 'Build meaningful connections',
-          nextSteps: [
-            'Attend 2 networking events/month',
-            'Schedule coffee chats weekly',
-            'Join community group',
-            'Host a small gathering'
-          ],
-          milestones: 0,
-          streak: 0,
-          synced: true
-        },
-        misc: {
-          id: 'misc',
-          name: 'Misc',
-          icon: '✨',
-          progress: 0,
-          timeSpent: 0,
-          goal: 'Creative expression & hobbies',
-          nextSteps: [
-            'Practice guitar 3x/week',
-            'Start photography course',
-            'Read 2 books/month',
-            'Write in journal daily'
-          ],
-          milestones: 0,
-          streak: 0,
-          synced: true
+      if (isAuth) {
+        const { data: { user } } = await supabase.auth.getUser()
+        
+        // Try to load from Supabase first
+        const supabaseData = await supabaseService.loadFromSupabase()
+        
+        if (supabaseData) {
+          // Save to IndexedDB for offline use
+          const dataArray = Object.entries(supabaseData).filter(([key]) => key !== 'overall')
+          
+          for (const [areaType, areaData] of dataArray) {
+            const existingArea = await offlineService.getAreaByType(user.id, areaType)
+            
+            if (existingArea) {
+              await offlineService.saveArea({
+                ...existingArea,
+                ...areaData,
+                user_id: user.id,
+                area_type: areaType,
+                synced: true
+              })
+            } else {
+              await offlineService.saveArea({
+                ...areaData,
+                user_id: user.id,
+                area_type: areaType,
+                synced: true
+              })
+            }
+          }
+          
+          // Also save to localStorage for compatibility
+          localStorage.setItem('dreamBuilderData', JSON.stringify(supabaseData))
+          return
         }
       }
-      localStorage.setItem('dreamBuilderData', JSON.stringify(defaultData))
+      
+      // Fallback to localStorage
+      const stored = localStorage.getItem('dreamBuilderData')
+      if (!stored) {
+        const defaultData = {
+          overall: {
+            id: 'overall',
+            name: 'Overall',
+            icon: '🎯',
+            goal: 'Become the best version of myself',
+            progress: 0,
+            timeSpent: 0,
+            milestones: 0,
+            streak: 0,
+            nextSteps: []
+          },
+          business: {
+            id: 'business',
+            name: 'Business',
+            icon: '💼',
+            goal: 'Make a $1,000,000',
+            progress: 25,
+            timeSpent: 120,
+            milestones: 5,
+            streak: 12,
+            nextSteps: ['Get resort client', 'Find business thesis idea']
+          },
+          tech: {
+            id: 'tech',
+            name: 'Tech',
+            icon: '⚡',
+            progress: 0,
+            timeSpent: 0,
+            goal: 'Master full-stack development',
+            nextSteps: ['Develop Fullstack App', 'Find Full-time Gig'],
+            milestones: 0,
+            streak: 0
+          },
+          physical: {
+            id: 'physical',
+            name: 'Physical',
+            icon: '💪',
+            progress: 0,
+            timeSpent: 0,
+            goal: 'Run a half marathon',
+            nextSteps: ['Increase weekly mileage to 30km'],
+            milestones: 0,
+            streak: 0
+          },
+          social: {
+            id: 'social',
+            name: 'Social',
+            icon: '🤝',
+            progress: 0,
+            timeSpent: 0,
+            goal: 'Build meaningful connections',
+            nextSteps: ['Attend networking events'],
+            milestones: 0,
+            streak: 0
+          },
+          misc: {
+            id: 'misc',
+            name: 'Misc',
+            icon: '✨',
+            progress: 0,
+            timeSpent: 0,
+            goal: 'Creative expression',
+            nextSteps: ['Practice guitar'],
+            milestones: 0,
+            streak: 0
+          }
+        }
+        localStorage.setItem('dreamBuilderData', JSON.stringify(defaultData))
+      }
+    } catch (error) {
+      console.error('Error initializing:', error)
+      // Continue with localStorage fallback
     }
   },
   
   fetchFields: async () => {
-    const stored = localStorage.getItem('dreamBuilderData')
-    return stored ? JSON.parse(stored) : {}
+    try {
+      const stored = localStorage.getItem('dreamBuilderData')
+      return stored ? JSON.parse(stored) : {}
+    } catch (error) {
+      console.error('Error fetching fields:', error)
+      return {}
+    }
   },
   
   updateProgress: async (fieldId, newProgress) => {
-    const data = JSON.parse(localStorage.getItem('dreamBuilderData'))
-    data[fieldId].progress = newProgress
-    localStorage.setItem('dreamBuilderData', JSON.stringify(data))
+    const data = JSON.parse(localStorage.getItem('dreamBuilderData') || '{}')
+    if (data[fieldId]) {
+      data[fieldId].progress = newProgress
+      localStorage.setItem('dreamBuilderData', JSON.stringify(data))
+    }
     
-    // Sync to Supabase if authenticated
     const isAuth = await supabaseService.isAuthenticated()
     if (isAuth) {
       await supabaseService.syncToSupabase(data)
@@ -309,9 +328,11 @@ const apiService = {
   },
   
   updateGoal: async (fieldId, newGoal) => {
-    const data = JSON.parse(localStorage.getItem('dreamBuilderData'))
-    data[fieldId].goal = newGoal
-    localStorage.setItem('dreamBuilderData', JSON.stringify(data))
+    const data = JSON.parse(localStorage.getItem('dreamBuilderData') || '{}')
+    if (data[fieldId]) {
+      data[fieldId].goal = newGoal
+      localStorage.setItem('dreamBuilderData', JSON.stringify(data))
+    }
     
     const isAuth = await supabaseService.isAuthenticated()
     if (isAuth) {
@@ -320,9 +341,11 @@ const apiService = {
   },
   
   updateNextSteps: async (fieldId, nextSteps) => {
-    const data = JSON.parse(localStorage.getItem('dreamBuilderData'))
-    data[fieldId].nextSteps = nextSteps
-    localStorage.setItem('dreamBuilderData', JSON.stringify(data))
+    const data = JSON.parse(localStorage.getItem('dreamBuilderData') || '{}')
+    if (data[fieldId]) {
+      data[fieldId].nextSteps = nextSteps
+      localStorage.setItem('dreamBuilderData', JSON.stringify(data))
+    }
     
     const isAuth = await supabaseService.isAuthenticated()
     if (isAuth) {
@@ -331,9 +354,12 @@ const apiService = {
   },
   
   addNextStep: async (fieldId, step) => {
-    const data = JSON.parse(localStorage.getItem('dreamBuilderData'))
-    data[fieldId].nextSteps.push(step)
-    localStorage.setItem('dreamBuilderData', JSON.stringify(data))
+    const data = JSON.parse(localStorage.getItem('dreamBuilderData') || '{}')
+    if (data[fieldId]) {
+      data[fieldId].nextSteps = data[fieldId].nextSteps || []
+      data[fieldId].nextSteps.push(step)
+      localStorage.setItem('dreamBuilderData', JSON.stringify(data))
+    }
     
     const isAuth = await supabaseService.isAuthenticated()
     if (isAuth) {
@@ -342,9 +368,11 @@ const apiService = {
   },
   
   addTimeSpent: async (fieldId, hours) => {
-    const data = JSON.parse(localStorage.getItem('dreamBuilderData'))
-    data[fieldId].timeSpent += hours
-    localStorage.setItem('dreamBuilderData', JSON.stringify(data))
+    const data = JSON.parse(localStorage.getItem('dreamBuilderData') || '{}')
+    if (data[fieldId]) {
+      data[fieldId].timeSpent = (data[fieldId].timeSpent || 0) + hours
+      localStorage.setItem('dreamBuilderData', JSON.stringify(data))
+    }
     
     const isAuth = await supabaseService.isAuthenticated()
     if (isAuth) {
@@ -353,9 +381,11 @@ const apiService = {
   },
 
   updateStreak: async (fieldId, newStreak) => {
-    const data = JSON.parse(localStorage.getItem('dreamBuilderData'))
-    data[fieldId].streak = newStreak
-    localStorage.setItem('dreamBuilderData', JSON.stringify(data))
+    const data = JSON.parse(localStorage.getItem('dreamBuilderData') || '{}')
+    if (data[fieldId]) {
+      data[fieldId].streak = newStreak
+      localStorage.setItem('dreamBuilderData', JSON.stringify(data))
+    }
     
     const isAuth = await supabaseService.isAuthenticated()
     if (isAuth) {
@@ -364,9 +394,11 @@ const apiService = {
   },
 
   updateMilestones: async (fieldId, newMilestones) => {
-    const data = JSON.parse(localStorage.getItem('dreamBuilderData'))
-    data[fieldId].milestones = newMilestones
-    localStorage.setItem('dreamBuilderData', JSON.stringify(data))
+    const data = JSON.parse(localStorage.getItem('dreamBuilderData') || '{}')
+    if (data[fieldId]) {
+      data[fieldId].milestones = newMilestones
+      localStorage.setItem('dreamBuilderData', JSON.stringify(data))
+    }
     
     const isAuth = await supabaseService.isAuthenticated()
     if (isAuth) {
@@ -374,11 +406,20 @@ const apiService = {
     }
   },
   
-  getUnsyncedCount: async () => 0,
+  getUnsyncedCount: async () => {
+    try {
+      const unsynced = await offlineService.getUnsyncedOperations()
+      return unsynced.length
+    } catch (error) {
+      console.error('Error getting unsynced count:', error)
+      return 0
+    }
+  },
+  
   syncOfflineData: async () => {
     const isAuth = await supabaseService.isAuthenticated()
     if (isAuth) {
-      const data = JSON.parse(localStorage.getItem('dreamBuilderData'))
+      const data = JSON.parse(localStorage.getItem('dreamBuilderData') || '{}')
       await supabaseService.syncToSupabase(data)
     }
   }
@@ -1155,8 +1196,12 @@ const DreamBuilderDashboard = () => {
 
       {/* Main Content */}
       {currentField && (
-        <div style={{ paddingLeft: '24px', paddingRight: '24px', paddingTop: '96px', paddingBottom: '48px' }}>
-          <div style={{ maxWidth: '1280px', margin: '0 auto' }}>
+        <div style={{ 
+          padding: isMobile ? '80px 16px 48px' : '96px 24px 48px', 
+          width: '100%', 
+          boxSizing: 'border-box' // Add this
+        }}>
+        <div style={{ maxWidth: '1280px', margin: '0 auto', width: '100%' }}>
             <div style={{ marginBottom: '32px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '12px' }}>
                 <div style={{ fontSize: '48px' }}>{currentField.icon}</div>
@@ -1604,7 +1649,8 @@ const DreamBuilderDashboard = () => {
                       gap: '12px', 
                       maxHeight: '340px', 
                       overflowY: 'auto',
-                      paddingRight: '4px' 
+                      overflowX: 'hidden', // Add this to prevent horizontal overflow
+                      paddingRight: '8px'
                     }}>
                       {nextSteps.map((step, idx) => {
                         const isChecked = checkedSteps[idx]?.checked;
@@ -1612,90 +1658,34 @@ const DreamBuilderDashboard = () => {
                         const today = getTodayString();
                         const canUndo = isChecked && checkDate === today;
                         
+                        // Convert string tasks to object format
+                        const taskObj = typeof step === 'string' 
+                          ? { text: step, subtasks: [] }
+                          : step;
+                        
                         return (
-                          <div key={idx} style={{
-                            display: 'flex', alignItems: 'center', gap: '12px',
-                            backgroundColor: isChecked ? 'rgba(34, 197, 94, 0.1)' : 'rgba(255, 255, 255, 0.05)', 
-                            borderRadius: '12px', 
-                            padding: '12px 16px',
-                            border: isChecked ? '1px solid rgba(34, 197, 94, 0.3)' : 'none',
-                            transition: 'all 0.2s'
-                          }}>
-                            {/* Checkbox */}
-                            <button
-                              onClick={() => isChecked ? handleUncheckStep(idx) : handleCheckStep(idx)}
-                              disabled={isChecked && !canUndo}
-                              style={{
-                                width: '24px',
-                                height: '24px',
-                                borderRadius: '6px',
-                                backgroundColor: isChecked ? 'rgba(34, 197, 94, 0.3)' : 'transparent',
-                                border: isChecked ? '2px solid #22c55e' : '2px solid rgba(255, 255, 255, 0.3)',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                cursor: (isChecked && !canUndo) ? 'not-allowed' : 'pointer',
-                                flexShrink: 0,
-                                transition: 'all 0.2s',
-                                opacity: (isChecked && !canUndo) ? 0.5 : 1
-                              }}
-                            >
-                              {isChecked && <CheckCircle2 size={16} color="#22c55e" />}
-                            </button>
-                            
-                            <div style={{
-                              width: '24px', height: '24px', borderRadius: '6px',
-                              backgroundColor: 'rgba(220, 38, 38, 0.2)', 
-                              border: '1px solid rgba(220, 38, 38, 0.3)',
-                              display: 'flex', alignItems: 'center', justifyContent: 'center',
-                              fontSize: '12px', fontWeight: 'bold', flexShrink: 0
-                            }}>
-                              {idx + 1}
-                            </div>
-                            
-                            <div style={{ 
-                              flex: 1,
-                              textDecoration: isChecked ? 'line-through' : 'none',
-                              opacity: isChecked ? 0.6 : 1
-                            }}>
-                              <EditableText
-                                value={step}
-                                onSave={(newValue) => updateNextStep(idx, newValue)}
-                              />
-                            </div>
-
-                            {/* Date badge for completed items from previous days */}
-                            {isChecked && !canUndo && (
-                              <span style={{
-                                fontSize: '11px',
-                                color: '#6b7280',
-                                backgroundColor: 'rgba(255, 255, 255, 0.05)',
-                                padding: '4px 8px',
-                                borderRadius: '4px'
-                              }}>
-                                {checkDate}
-                              </span>
-                            )}
-
-                            <button
-                              onClick={() => deleteNextStep(idx)}
-                              style={{
-                                padding: '8px',
-                                backgroundColor: 'transparent',
-                                border: 'none',
-                                color: '#6b7280',
-                                cursor: 'pointer',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                transition: 'color 0.2s'
-                              }}
-                              onMouseEnter={(e) => e.currentTarget.style.color = '#ef4444'}
-                              onMouseLeave={(e) => e.currentTarget.style.color = '#6b7280'}
-                            >
-                              <X size={18} />
-                            </button>
-                          </div>
+                          <ExpandableTask
+                            key={idx}
+                            task={taskObj}
+                            index={idx}
+                            onUpdateTask={async (index, updatedTask) => {
+                              const newSteps = [...nextSteps];
+                              newSteps[index] = updatedTask;
+                              setNextSteps(newSteps);
+                              await apiService.updateNextSteps(selectedField, newSteps);
+                              await loadFields();
+                            }}
+                            onDeleteTask={deleteNextStep}
+                            isChecked={isChecked}
+                            onCheck={handleCheckStep}
+                            onUncheck={handleUncheckStep}
+                            canUndo={canUndo}
+                            onTimeComplete={async (hours) => {
+                              // Add time to the current field
+                              await apiService.addTimeSpent(selectedField, hours);
+                              await loadFields();
+                            }}
+                          />
                         );
                       })}
 
