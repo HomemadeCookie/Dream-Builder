@@ -47,20 +47,28 @@ export const supabaseService = {
             })
             .eq('id', existingArea.id)
 
-          // Sync next steps
-          // Delete old steps and insert new ones
+          // Sync next steps - DELETE old ones first
           await supabase
             .from('next_steps')
             .delete()
             .eq('area_id', existingArea.id)
 
+          // INSERT new ones with subtasks
           if (areaData.nextSteps && areaData.nextSteps.length > 0) {
-            const nextSteps = areaData.nextSteps.map((step, index) => ({
-              area_id: existingArea.id,
-              user_id: user.id,
-              content: typeof step === 'string' ? step : step.content,
-              order_index: index
-            }))
+            const nextSteps = areaData.nextSteps.map((step, index) => {
+              const stepObj = typeof step === 'string' 
+                ? { text: step, subtasks: [], completed: false }
+                : step;
+              
+              return {
+                area_id: existingArea.id,
+                user_id: user.id,
+                content: stepObj.text || step,
+                completed: stepObj.completed || false,
+                subtasks: stepObj.subtasks || [], // CRITICAL: Include subtasks
+                order_index: index
+              };
+            });
 
             await supabase.from('next_steps').insert(nextSteps)
           }
@@ -83,14 +91,22 @@ export const supabaseService = {
             .select()
             .single()
 
-          // Insert next steps
+          // Insert next steps with subtasks
           if (newArea && areaData.nextSteps && areaData.nextSteps.length > 0) {
-            const nextSteps = areaData.nextSteps.map((step, index) => ({
-              area_id: newArea.id,
-              user_id: user.id,
-              content: typeof step === 'string' ? step : step.content,
-              order_index: index
-            }))
+            const nextSteps = areaData.nextSteps.map((step, index) => {
+              const stepObj = typeof step === 'string' 
+                ? { text: step, subtasks: [], completed: false }
+                : step;
+              
+              return {
+                area_id: newArea.id,
+                user_id: user.id,
+                content: stepObj.text || step,
+                completed: stepObj.completed || false,
+                subtasks: stepObj.subtasks || [], // CRITICAL: Include subtasks
+                order_index: index
+              };
+            });
 
             await supabase.from('next_steps').insert(nextSteps)
           }
@@ -110,7 +126,9 @@ export const supabaseService = {
     if (!user) return null
 
     try {
-      const { data: areas } = await supabase
+      console.log('Loading data from Supabase for user:', user.id);
+      
+      const { data: areas, error } = await supabase
         .from('areas')
         .select(`
           *,
@@ -118,18 +136,28 @@ export const supabaseService = {
             id,
             content,
             order_index,
-            completed
+            completed,
+            subtasks
           )
         `)
         .eq('user_id', user.id)
         .order('area_type')
 
+      if (error) {
+        console.error('Error loading from Supabase:', error);
+        return null;
+      }
+
       if (!areas) return null
+
+      console.log('Raw areas data from Supabase:', areas);
 
       // Convert to your local data format
       const convertedData = {}
       
       areas.forEach(area => {
+        console.log(`Processing area: ${area.area_type}`, area.next_steps);
+        
         convertedData[area.area_type] = {
           id: area.area_type,
           name: area.name,
@@ -141,8 +169,18 @@ export const supabaseService = {
           streak: area.streak,
           nextSteps: area.next_steps
             .sort((a, b) => a.order_index - b.order_index)
-            .map(step => step.content)
+            .map(step => {
+              console.log('Processing step:', step);
+              return {
+                id: step.id,
+                text: step.content,
+                subtasks: Array.isArray(step.subtasks) ? step.subtasks : [], // CRITICAL: Load subtasks
+                completed: step.completed || false
+              };
+            })
         }
+        
+        console.log(`Converted ${area.area_type}:`, convertedData[area.area_type]);
       })
 
       // Add overall field
@@ -158,14 +196,16 @@ export const supabaseService = {
         nextSteps: []
       }
 
+      console.log('Final converted data:', convertedData);
       return convertedData
     } catch (error) {
       console.error('Error loading from Supabase:', error)
       return null
     }
   },
+  
   sendFriendRequest: async (friendId) => {
-    const { data: { user } } = await supabase.auth.getUser(); // 
+    const { data: { user } } = await supabase.auth.getUser();
     if (!user) return null;
 
     const { data, error } = await supabase
@@ -173,7 +213,7 @@ export const supabaseService = {
       .insert({
         user_id: user.id,
         friend_id: friendId,
-        status: 'pending' // Initial status for new requests
+        status: 'pending'
       });
 
     if (error) throw error;

@@ -199,7 +199,7 @@ class OfflineService {
         const transaction = this.db.transaction(['syncQueue'], 'readonly');
         const store = transaction.objectStore('syncQueue');
         const index = store.index('synced');
-        const request = index.getAll(false);
+        const request = index.getAll(0);
         
         request.onsuccess = () => resolve(request.result || []);
         request.onerror = () => reject(request.error);

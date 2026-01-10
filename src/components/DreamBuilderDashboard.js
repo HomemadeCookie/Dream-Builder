@@ -5,6 +5,22 @@ import { offlineService } from '../services/offlineService.js';
 import { supabase } from '../lib/supabase.js';
 import ExpandableTask from './ExpandableTask.js';
 
+const deduplicateTasks = (tasks) => {
+  if (!tasks || !Array.isArray(tasks)) return [];
+  
+  const seen = new Set();
+  return tasks.filter(task => {
+    const taskText = typeof task === 'string' ? task : task.text;
+    const taskId = task.id || taskText;
+    
+    if (seen.has(taskId)) {
+      return false; // Skip duplicate
+    }
+    seen.add(taskId);
+    return true;
+  });
+};
+
 const EditableText = ({ value, onSave }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [text, setText] = useState(value);
@@ -185,20 +201,26 @@ const RadarChart = ({ data }) => {
 
 const apiService = {
   initialize: async () => {
+    let supabaseData = null;
     try {
       const isAuth = await supabaseService.isAuthenticated()
       
       if (isAuth) {
         const { data: { user } } = await supabase.auth.getUser()
+        console.log('User authenticated, loading from Supabase...');
         
         // Try to load from Supabase first
-        const supabaseData = await supabaseService.loadFromSupabase()
+        supabaseData = await supabaseService.loadFromSupabase()
+        
+        console.log('Loaded Supabase data:', supabaseData);
         
         if (supabaseData) {
           // Save to IndexedDB for offline use
           const dataArray = Object.entries(supabaseData).filter(([key]) => key !== 'overall')
           
           for (const [areaType, areaData] of dataArray) {
+            console.log(`Saving ${areaType} to IndexedDB:`, areaData);
+            
             const existingArea = await offlineService.getAreaByType(user.id, areaType)
             
             if (existingArea) {
@@ -219,7 +241,8 @@ const apiService = {
             }
           }
           
-          // Also save to localStorage for compatibility
+          // Also save to localStorage - CRITICAL: This is what fetchFields reads!
+          console.log('Saving to localStorage:', supabaseData);
           localStorage.setItem('dreamBuilderData', JSON.stringify(supabaseData))
           return
         }
@@ -227,7 +250,10 @@ const apiService = {
       
       // Fallback to localStorage
       const stored = localStorage.getItem('dreamBuilderData')
-      if (!stored) {
+      console.log('Loading from localStorage:', stored ? JSON.parse(stored) : 'No data');
+      
+      if (!stored && !supabaseData) {
+        console.log('No data found, creating default data...');
         const defaultData = {
           overall: {
             id: 'overall',
@@ -249,7 +275,23 @@ const apiService = {
             timeSpent: 120,
             milestones: 5,
             streak: 12,
-            nextSteps: ['Get resort client', 'Find business thesis idea']
+            nextSteps: [
+              { 
+                id: 'biz-1',
+                text: 'Get resort client', 
+                subtasks: [
+                  { id: 'biz-1-sub-1', text: 'Research resort websites', completed: false },
+                  { id: 'biz-1-sub-2', text: 'Prepare pitch deck', completed: false }
+                ], 
+                completed: false 
+              },
+              { 
+                id: 'biz-2',
+                text: 'Find business thesis idea', 
+                subtasks: [], 
+                completed: false 
+              }
+            ],
           },
           tech: {
             id: 'tech',
@@ -258,7 +300,10 @@ const apiService = {
             progress: 0,
             timeSpent: 0,
             goal: 'Master full-stack development',
-            nextSteps: ['Develop Fullstack App', 'Find Full-time Gig'],
+            nextSteps: [
+              { id: 'tech-1', text: 'Develop Fullstack App', subtasks: [], completed: false },
+              { id: 'tech-2', text: 'Find Full-time Gig', subtasks: [], completed: false }
+            ],
             milestones: 0,
             streak: 0
           },
@@ -269,7 +314,9 @@ const apiService = {
             progress: 0,
             timeSpent: 0,
             goal: 'Run a half marathon',
-            nextSteps: ['Increase weekly mileage to 30km'],
+            nextSteps: [
+              { id: 'phys-1', text: 'Increase weekly mileage to 30km', subtasks: [], completed: false },
+            ],
             milestones: 0,
             streak: 0
           },
@@ -280,7 +327,9 @@ const apiService = {
             progress: 0,
             timeSpent: 0,
             goal: 'Build meaningful connections',
-            nextSteps: ['Attend networking events'],
+            nextSteps: [
+              { id: 'soc-1', text: 'Attend networking events', subtasks: [], completed: false },
+            ],
             milestones: 0,
             streak: 0
           },
@@ -291,7 +340,9 @@ const apiService = {
             progress: 0,
             timeSpent: 0,
             goal: 'Creative expression',
-            nextSteps: ['Practice guitar'],
+            nextSteps: [
+              { id: 'misc-1', text: 'Practice guitar', subtasks: [], completed: false },
+            ],
             milestones: 0,
             streak: 0
           }
@@ -307,7 +358,9 @@ const apiService = {
   fetchFields: async () => {
     try {
       const stored = localStorage.getItem('dreamBuilderData')
-      return stored ? JSON.parse(stored) : {}
+      const data = stored ? JSON.parse(stored) : {};
+      console.log('fetchFields returning:', data);
+      return data;
     } catch (error) {
       console.error('Error fetching fields:', error)
       return {}
@@ -456,25 +509,36 @@ const DreamBuilderDashboard = () => {
     "Find business thesis idea"
   ]);
 
-  const updateNextStep = async (index, newValue) => {
-    setNextSteps(prev => {
-      const updated = [...prev];
-      updated[index] = newValue;
-      return updated;
-    });
-    // Add this to persist the change
+  const updateNextStep = async (index, updatedTask) => {
+    const newSteps = [...nextSteps];
+    newSteps[index] = updatedTask; 
+    
+    // FIX: Deduplicate before saving
+    const uniqueSteps = deduplicateTasks(newSteps);
+    setNextSteps(uniqueSteps);
+
     try {
-      await apiService.updateNextSteps(selectedField, nextSteps.map((step, idx) => 
-        idx === index ? newValue : step
-      ));
+      await apiService.updateNextSteps(selectedField, uniqueSteps);
+      await loadFields();
     } catch (error) {
       console.error('Error updating next step:', error);
     }
   };
 
   const addNextStep = async () => {
-    const newStep = "New Step";
-    setNextSteps(prev => [...prev, newStep]);
+    const newStep = { 
+      text: "New Step", 
+      subtasks: [], 
+      completed: false,
+      id: Date.now() // Unique ID helps with deduplication
+    };
+    
+    const updatedSteps = [...nextSteps, newStep];
+    
+    // FIX: Deduplicate before saving
+    const uniqueSteps = deduplicateTasks(updatedSteps);
+    setNextSteps(uniqueSteps);
+    
     try {
       await apiService.addNextStep(selectedField, newStep);
       await loadFields();
@@ -711,51 +775,54 @@ const DreamBuilderDashboard = () => {
 
   // Update this useEffect
   useEffect(() => {
-    if (currentField) {
-      setCurrentGoal(currentField.goal || "");
-      setNextSteps(currentField.nextSteps || []);
+  if (currentField) {
+    setCurrentGoal(currentField.goal || "");
+    
+    // FIX: Deduplicate tasks before setting
+    const uniqueTasks = deduplicateTasks(currentField.nextSteps || []);
+    setNextSteps(uniqueTasks);
+    
+    // Load checked steps for this field
+    const loadedCheckedSteps = stepStorageService.loadCheckedSteps(selectedField);
+    setCheckedSteps(loadedCheckedSteps);
+    
+    // Load last check date
+    const loadedLastCheckDate = stepStorageService.loadLastCheckDate(selectedField);
+    setLastCheckDate(loadedLastCheckDate);
+    
+    // Calculate today's completed count
+    const todayCount = countTodayCompleted(loadedCheckedSteps);
+    setTodayCompletedCount(todayCount);
+    
+    // Load timer state for this field
+    const savedTimer = loadTimerState(selectedField);
+    if (savedTimer) {
+      setFieldTimers(prev => ({
+        ...prev,
+        [selectedField]: savedTimer
+      }));
       
-      // Load checked steps for this field
-      const loadedCheckedSteps = stepStorageService.loadCheckedSteps(selectedField);
-      setCheckedSteps(loadedCheckedSteps);
-      
-      // Load last check date
-      const loadedLastCheckDate = stepStorageService.loadLastCheckDate(selectedField);
-      setLastCheckDate(loadedLastCheckDate);
-      
-      // Calculate today's completed count
-      const todayCount = countTodayCompleted(loadedCheckedSteps);
-      setTodayCompletedCount(todayCount);
-      
-      // Load timer state for this field
-      const savedTimer = loadTimerState(selectedField);
-      if (savedTimer) {
-        setFieldTimers(prev => ({
-          ...prev,
-          [selectedField]: savedTimer
-        }));
-        
-        // If timer is running and no interval exists, start it
-        if (savedTimer.running && !timerIntervalRef.current) {
-          timerIntervalRef.current = setInterval(() => {
-            setFieldTimers(prev => {
-              const newTimers = { ...prev };
-              Object.keys(newTimers).forEach(fieldId => {
-                if (newTimers[fieldId]?.running) {
-                  newTimers[fieldId] = {
-                    ...newTimers[fieldId],
-                    seconds: newTimers[fieldId].seconds + 1
-                  };
-                  saveTimerState(fieldId, newTimers[fieldId].seconds, newTimers[fieldId].accumulated, true);
-                }
-              });
-              return newTimers;
+      // If timer is running and no interval exists, start it
+      if (savedTimer.running && !timerIntervalRef.current) {
+        timerIntervalRef.current = setInterval(() => {
+          setFieldTimers(prev => {
+            const newTimers = { ...prev };
+            Object.keys(newTimers).forEach(fieldId => {
+              if (newTimers[fieldId]?.running) {
+                newTimers[fieldId] = {
+                  ...newTimers[fieldId],
+                  seconds: newTimers[fieldId].seconds + 1
+                };
+                saveTimerState(fieldId, newTimers[fieldId].seconds, newTimers[fieldId].accumulated, true);
+              }
             });
-          }, 1000);
-        }
+            return newTimers;
+          });
+        }, 1000);
       }
     }
-  }, [selectedField, fields, currentField]);
+  }
+}, [selectedField, fields, currentField]);
 
   // Add this new useEffect to check streak at midnight
   useEffect(() => {
@@ -1660,19 +1727,26 @@ const DreamBuilderDashboard = () => {
                         
                         // Convert string tasks to object format
                         const taskObj = typeof step === 'string' 
-                          ? { text: step, subtasks: [] }
-                          : step;
+                          ? { text: step, subtasks: [], id: `${selectedField}-${idx}` }
+                          : { ...step, id: step.id || `${selectedField}-${idx}` };
+                        
+                        // Create a stable unique key combining field and index
+                        const uniqueKey = `${selectedField}-task-${taskObj.id || idx}`;
                         
                         return (
                           <ExpandableTask
-                            key={idx}
+                            key={uniqueKey}  // Use stable unique key
                             task={taskObj}
                             index={idx}
                             onUpdateTask={async (index, updatedTask) => {
                               const newSteps = [...nextSteps];
                               newSteps[index] = updatedTask;
-                              setNextSteps(newSteps);
-                              await apiService.updateNextSteps(selectedField, newSteps);
+                              
+                              // Deduplicate before saving
+                              const uniqueSteps = deduplicateTasks(newSteps);
+                              setNextSteps(uniqueSteps);
+                              
+                              await apiService.updateNextSteps(selectedField, uniqueSteps);
                               await loadFields();
                             }}
                             onDeleteTask={deleteNextStep}
@@ -1681,7 +1755,6 @@ const DreamBuilderDashboard = () => {
                             onUncheck={handleUncheckStep}
                             canUndo={canUndo}
                             onTimeComplete={async (hours) => {
-                              // Add time to the current field
                               await apiService.addTimeSpent(selectedField, hours);
                               await loadFields();
                             }}

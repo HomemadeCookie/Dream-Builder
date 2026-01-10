@@ -165,10 +165,10 @@ class Database {
         timeSpent: 0,
         goal: 'Launch MVP by Q2',
         nextSteps: [
-          'Get Resort Client',
-          'Finalize Thesis Idea',
-          'Build landing page',
-          'Reach out to first 10 customers'
+          { text: 'Get resort client', subtasks: [], completed: false },
+          { text: 'Finalize Thesis Idea', subtasks: [], completed: false },
+          { text: 'Build landing page', subtasks: [], completed: false },
+          { text: 'Reach out to first 10 customers', subtasks: [], completed: false },
         ],
         milestones: 0,
         streak: 0,
@@ -182,10 +182,10 @@ class Database {
         timeSpent: 0,
         goal: 'Master full-stack development',
         nextSteps: [
-          'Develop Fullstack App',
-          'Find Full-time Gig',
-          'Learn system design',
-          'Master TypeScript'
+          { text: 'Develop Fullstack App', subtasks: [], completed: false },
+          { text: 'Find Full-time Gig', subtasks: [], completed: false },
+          { text: 'Learn system design', subtasks: [], completed: false },
+          { text: 'Master TypeScript', subtasks: [], completed: false },
         ],
         milestones: 0,
         streak: 0,
@@ -199,10 +199,10 @@ class Database {
         timeSpent: 0,
         goal: 'Run a half marathon',
         nextSteps: [
-          'Increase weekly mileage to 30km',
-          'Add strength training 2x/week',
-          'Join running club',
-          'Focus on nutrition'
+          { text: 'Increase weekly mileage to 30km', subtasks: [], completed: false },
+          { text: 'Add strength training 2x/week', subtasks: [], completed: false },
+          { text: 'Join running club', subtasks: [], completed: false },
+          { text: 'Focus on nutrition', subtasks: [], completed: false },
         ],
         milestones: 0,
         streak: 0,
@@ -216,10 +216,10 @@ class Database {
         timeSpent: 0,
         goal: 'Build meaningful connections',
         nextSteps: [
-          'Attend 2 networking events/month',
-          'Schedule coffee chats weekly',
-          'Join community group',
-          'Host a small gathering'
+          { text: 'Attend 2 networking events/month', subtasks: [], completed: false },
+          { text: 'Schedule coffee chats weekly', subtasks: [], completed: false },
+          { text: 'Join community group', subtasks: [], completed: false },
+          { text: 'Host a small gathering', subtasks: [], completed: false },
         ],
         milestones: 0,
         streak: 0,
@@ -233,10 +233,10 @@ class Database {
         timeSpent: 0,
         goal: 'Creative expression & hobbies',
         nextSteps: [
-          'Practice guitar 3x/week',
-          'Start photography course',
-          'Read 2 books/month',
-          'Write in journal daily'
+          { text: 'Practice guitar 3x/week', subtasks: [], completed: false },
+          { text: 'Start photography course', subtasks: [], completed: false },
+          { text: 'Read 2 books/month', subtasks: [], completed: false },
+          { text: 'Write in journal daily', subtasks: [], completed: false },
         ],
         milestones: 0,
         streak: 0,
