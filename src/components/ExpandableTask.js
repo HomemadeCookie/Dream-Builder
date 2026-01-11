@@ -37,12 +37,26 @@ const ExpandableTask = ({
   // FIX: Always sync subtasks and title when task changes
   const [subtasks, setSubtasks] = useState([]);
   
+  // Store the previous task text to detect real changes
+  const prevTaskTextRef = useRef();
+  
   useEffect(() => {
     // Ensure we're working with the object format
     const taskObj = typeof task === 'string' ? { text: task, subtasks: [] } : task;
+    const currentTaskText = taskObj.text || task;
+    
+    // Only update if the task text actually changed from the source
+    // AND we're not currently editing (to prevent overwriting user input)
+    if (prevTaskTextRef.current !== currentTaskText && !isEditingTitle) {
+      setEditedTitle(currentTaskText);
+    }
+    
+    // Always update subtasks (they don't have the same conflict)
     setSubtasks(taskObj.subtasks || []);
-    setEditedTitle(taskObj.text || task);
-  }, [task]); // This will update whenever task prop changes
+    
+    // Store current text for next comparison
+    prevTaskTextRef.current = currentTaskText;
+  }, [task, isEditingTitle]); // Watch both task and editing state
 
   const totalSubtasks = subtasks.length;
   const completedSubtasks = subtasks.filter(st => st.completed).length;
@@ -59,8 +73,14 @@ const ExpandableTask = ({
 
   const handleTitleSave = () => {
     setIsEditingTitle(false);
-    if (editedTitle !== (task.text || task)) {
-      onUpdateTask(index, { ...task, text: editedTitle, subtasks });
+    const taskObj = typeof task === 'string' ? { text: task, subtasks: [] } : task;
+    
+    // Only save if the text actually changed
+    if (editedTitle !== taskObj.text && editedTitle.trim() !== '') {
+      onUpdateTask(index, { ...taskObj, text: editedTitle, subtasks });
+    } else if (editedTitle.trim() === '') {
+      // Revert to original if empty
+      setEditedTitle(taskObj.text || task);
     }
   };
 
