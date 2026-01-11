@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Maximize2, X, Play, Pause, Square, Clock, CheckCircle2, Minimize2 } from 'lucide-react';
+import { Maximize2, X, Play, Pause, Square, Clock, CheckCircle2, Minimize2, ChevronDown, ChevronRight } from 'lucide-react';
 
 const theme = {
   bg: '#0b0b0b',
@@ -30,37 +30,47 @@ const ExpandableTask = ({
   const [timerRunning, setTimerRunning] = useState(false);
   const timerIntervalRef = useRef(null);
   const [newSubtaskText, setNewSubtaskText] = useState('');
+  const [openSubInput, setOpenSubInput] = useState(null);
+  const [newSubSubtaskText, setNewSubSubtaskText] = useState('');
   
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editedTitle, setEditedTitle] = useState(typeof task === 'string' ? task : task.text);
 
-  // FIX: Always sync subtasks and title when task changes
   const [subtasks, setSubtasks] = useState([]);
   
-  // Store the previous task text to detect real changes
   const prevTaskTextRef = useRef();
   
   useEffect(() => {
-    // Ensure we're working with the object format
     const taskObj = typeof task === 'string' ? { text: task, subtasks: [] } : task;
     const currentTaskText = taskObj.text || task;
     
-    // Only update if the task text actually changed from the source
-    // AND we're not currently editing (to prevent overwriting user input)
     if (prevTaskTextRef.current !== currentTaskText && !isEditingTitle) {
       setEditedTitle(currentTaskText);
     }
     
-    // Always update subtasks (they don't have the same conflict)
     setSubtasks(taskObj.subtasks || []);
-    
-    // Store current text for next comparison
     prevTaskTextRef.current = currentTaskText;
-  }, [task, isEditingTitle]); // Watch both task and editing state
+  }, [task, isEditingTitle]);
+
+  // RECURSIVE PROGRESS CALCULATION
+  const calculateWeightedProgress = (subs) => {
+    if (!subs || subs.length === 0) return 0;
+    
+    const totalWeight = subs.reduce((acc, sub) => {
+      if (sub.sub_subtasks && sub.sub_subtasks.length > 0) {
+        // If it has children, its progress is the average of children
+        const childrenCompleted = sub.sub_subtasks.filter(sst => sst.completed).length;
+        return acc + (childrenCompleted / sub.sub_subtasks.length);
+      }
+      // If no children, it's a simple 1 (done) or 0 (not done)
+      return acc + (sub.completed ? 1 : 0);
+    }, 0);
+
+    return Math.round((totalWeight / subs.length) * 100);
+  };
 
   const totalSubtasks = subtasks.length;
-  const completedSubtasks = subtasks.filter(st => st.completed).length;
-  const completionPercentage = totalSubtasks > 0 ? Math.round((completedSubtasks / totalSubtasks) * 100) : 0;
+  const completionPercentage = calculateWeightedProgress(subtasks);
 
   useEffect(() => {
     if (timerRunning) {
@@ -75,11 +85,9 @@ const ExpandableTask = ({
     setIsEditingTitle(false);
     const taskObj = typeof task === 'string' ? { text: task, subtasks: [] } : task;
     
-    // Only save if the text actually changed
     if (editedTitle !== taskObj.text && editedTitle.trim() !== '') {
       onUpdateTask(index, { ...taskObj, text: editedTitle, subtasks });
     } else if (editedTitle.trim() === '') {
-      // Revert to original if empty
       setEditedTitle(taskObj.text || task);
     }
   };
@@ -92,6 +100,58 @@ const ExpandableTask = ({
   };
 
   const formatTime = (s) => `${String(Math.floor(s / 3600)).padStart(2, '0')}:${String(Math.floor((s % 3600) / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+
+  // Toggle subtask - if it has children, check if all children are complete
+  const toggleSubtask = (subtaskIndex) => {
+    const updated = [...subtasks];
+    const subtask = updated[subtaskIndex];
+    
+    if (subtask.sub_subtasks && subtask.sub_subtasks.length > 0) {
+      // If has children, toggle all children
+      const allComplete = subtask.sub_subtasks.every(s => s.completed);
+      subtask.sub_subtasks = subtask.sub_subtasks.map(s => ({ ...s, completed: !allComplete }));
+      subtask.completed = !allComplete;
+    } else {
+      // Simple toggle
+      subtask.completed = !subtask.completed;
+    }
+    
+    setSubtasks(updated);
+    onUpdateTask(index, { ...task, text: editedTitle, subtasks: updated });
+  };
+
+  // Toggle sub-subtask
+  const toggleSubSubtask = (subtaskIndex, subSubtaskIndex) => {
+    const updated = [...subtasks];
+    updated[subtaskIndex].sub_subtasks[subSubtaskIndex].completed = 
+      !updated[subtaskIndex].sub_subtasks[subSubtaskIndex].completed;
+    
+    // Check if parent should be marked complete
+    const allChildrenComplete = updated[subtaskIndex].sub_subtasks.every(s => s.completed);
+    updated[subtaskIndex].completed = allChildrenComplete;
+    
+    setSubtasks(updated);
+    onUpdateTask(index, { ...task, text: editedTitle, subtasks: updated });
+  };
+
+  // Add sub-subtask
+  const addSubSubtask = (subtaskIndex, text) => {
+    if (!text || !text.trim()) return;
+    
+    const updated = [...subtasks];
+    if (!updated[subtaskIndex].sub_subtasks) {
+      updated[subtaskIndex].sub_subtasks = [];
+    }
+    updated[subtaskIndex].sub_subtasks.push({
+      id: Date.now(),
+      text: text.trim(),
+      completed: false
+    });
+    
+    setSubtasks(updated);
+    onUpdateTask(index, { ...task, text: editedTitle, subtasks: updated });
+    setNewSubSubtaskText('');
+  };
 
   const containerStyle = isFullScreen ? {
     position: 'fixed',
@@ -189,7 +249,11 @@ const ExpandableTask = ({
               if (isChecked) {
                 onUncheck(index);
               } else {
-                const updated = subtasks.map(st => ({ ...st, completed: true }));
+                const updated = subtasks.map(st => ({ 
+                  ...st, 
+                  completed: true,
+                  sub_subtasks: st.sub_subtasks?.map(sst => ({ ...sst, completed: true }))
+                }));
                 setSubtasks(updated);
                 onUpdateTask(index, { ...task, text: editedTitle, subtasks: updated });
                 onCheck(index);
@@ -348,88 +412,239 @@ const ExpandableTask = ({
           </div>
         )}
 
-        {/* SUBTASKS */}
+        {/* SUBTASKS WITH NESTED SUB-SUBTASKS */}
         {isFullScreen && (
           <div style={{ flex: 1 }}>
             <h3 style={{ color: '#9ca3af', fontSize: '14px', marginBottom: '16px', fontWeight: '600' }}>
-              Subtasks ({completedSubtasks}/{totalSubtasks})
+              Subtasks ({completionPercentage}% complete)
             </h3>
             
             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '24px' }}>
-              {subtasks.map((st, i) => (
-                <div
-                  key={st.id || i}
-                  style={{ 
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '12px',
-                    padding: '12px 16px',
-                    background: 'rgba(255,255,255,0.04)',
-                    borderRadius: '12px',
-                    border: '1px solid rgba(255,255,255,0.08)',
-                    transition: 'background 0.2s ease'
-                  }}
-                >
-                  <input 
-                    type="checkbox" 
-                    checked={st.completed} 
-                    onChange={() => {
-                      const updated = [...subtasks];
-                      updated[i].completed = !updated[i].completed;
-                      setSubtasks(updated);
-                      onUpdateTask(index, { ...task, text: editedTitle, subtasks: updated });
-                    }} 
-                    style={{ width: '18px', height: '18px', accentColor: '#22c55e' }} 
-                  />
+              {subtasks.map((st, i) => {
+                const hasChildren = st.sub_subtasks && st.sub_subtasks.length > 0;
+                const allChildrenComplete = hasChildren && st.sub_subtasks.every(s => s.completed);
+                
+                return (
+                  <div key={st.id || i} style={{ marginBottom: '8px' }}>
+                    {/* PARENT CARD CONTAINING SUBTASK AND ALL SUB-SUBTASKS */}
+                    <div style={{ 
+                      background: 'rgba(255,255,255,0.04)',
+                      borderRadius: '12px',
+                      border: '1px solid rgba(255,255,255,0.08)',
+                      overflow: 'hidden'
+                    }}>
+                      {/* SUBTASK ROW */}
+                      <div style={{ 
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '12px',
+                        padding: '12px 16px',
+                        transition: 'background 0.2s ease'
+                      }}>
+                        <input 
+                          type="checkbox" 
+                          checked={st.completed || allChildrenComplete} 
+                          onChange={() => toggleSubtask(i)} 
+                          style={{ width: '18px', height: '18px', accentColor: '#22c55e', cursor: 'pointer' }} 
+                        />
 
-                  <span
-                    style={{
-                      flex: 1,
-                      fontSize: '16px',
-                      textDecoration: st.completed ? 'line-through' : 'none',
-                      opacity: st.completed ? 0.5 : 1,
-                      color: '#fff'
-                    }}
-                  >
-                    {st.text}
-                  </span>
+                        <span style={{
+                          flex: 1,
+                          fontSize: '16px',
+                          textDecoration: (st.completed || allChildrenComplete) ? 'line-through' : 'none',
+                          opacity: (st.completed || allChildrenComplete) ? 0.5 : 1,
+                          color: '#fff'
+                        }}>
+                          {st.text}
+                        </span>
 
-                  <button
-                    onClick={() => {
-                      const updated = subtasks.filter((_, idx) => idx !== i);
-                      setSubtasks(updated);
-                      onUpdateTask(index, { ...task, text: editedTitle, subtasks: updated });
-                    }}
-                    style={{
-                      background: 'transparent',
-                      border: 'none',
-                      color: '#6b7280',
-                      cursor: 'pointer',
-                      padding: '4px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center'
-                    }}
-                    title="Delete mini task"
-                  >
-                    <X size={16} />
-                  </button>
-                </div>
-              ))}
+                        {/* ADD SUB-SUBTASK BUTTON - ICON ONLY */}
+                        <button
+                          onClick={() => setOpenSubInput(openSubInput === i ? null : i)}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            background: 'transparent',
+                            border: 'none',
+                            color: '#6b7280',
+                            padding: '4px',
+                            cursor: 'pointer',
+                            transition: 'color 0.2s'
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.color = '#9ca3af';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.color = '#6b7280';
+                          }}
+                        >
+                          {openSubInput === i ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                        </button>
+
+                        {/* DELETE SUBTASK */}
+                        <button
+                          onClick={() => {
+                            const updated = subtasks.filter((_, idx) => idx !== i);
+                            setSubtasks(updated);
+                            onUpdateTask(index, { ...task, text: editedTitle, subtasks: updated });
+                          }}
+                          style={{
+                            background: 'transparent',
+                            border: 'none',
+                            color: '#6b7280',
+                            cursor: 'pointer',
+                            padding: '4px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center'
+                          }}
+                        >
+                          <X size={16} />
+                        </button>
+                      </div>
+
+                      {/* RENDER SUB-SUBTASKS (INDENTED WITHIN SAME CARD) - ONLY WHEN DROPDOWN IS OPEN */}
+                      {openSubInput === i && hasChildren && st.sub_subtasks.map((sst, j) => (
+                        <div 
+                          key={sst.id || j} 
+                          style={{ 
+                            marginLeft: '48px',
+                            marginRight: '16px',
+                            marginBottom: j === st.sub_subtasks.length - 1 ? '8px' : '8px',
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            gap: '10px',
+                            padding: '8px 12px',
+                            background: 'transparent',
+                            borderRadius: '8px',
+                            border: '1px solid rgba(255, 255, 255, 0.1)',
+                            borderLeft: '2px solid rgba(255, 255, 255, 0.2)'
+                          }}
+                        >
+                          <input 
+                            type="checkbox" 
+                            checked={sst.completed} 
+                            onChange={() => toggleSubSubtask(i, j)}
+                            style={{ width: '14px', height: '14px', accentColor: '#22c55e', cursor: 'pointer' }}
+                          />
+                          <span style={{ 
+                            fontSize: '14px', 
+                            color: '#d1d5db',
+                            flex: 1,
+                            textDecoration: sst.completed ? 'line-through' : 'none',
+                            opacity: sst.completed ? 0.5 : 1
+                          }}>
+                            {sst.text}
+                          </span>
+                          
+                          {/* DELETE SUB-SUBTASK */}
+                          <button
+                            onClick={() => {
+                              const updated = [...subtasks];
+                              updated[i].sub_subtasks = updated[i].sub_subtasks.filter((_, idx) => idx !== j);
+                              setSubtasks(updated);
+                              onUpdateTask(index, { ...task, text: editedTitle, subtasks: updated });
+                            }}
+                            style={{
+                              background: 'transparent',
+                              border: 'none',
+                              color: '#6b7280',
+                              cursor: 'pointer',
+                              padding: '2px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center'
+                            }}
+                          >
+                            <X size={12} />
+                          </button>
+                        </div>
+                      ))}
+
+                      {/* SUB-SUBTASK INPUT DROPDOWN (INSIDE PARENT CARD) */}
+                      {openSubInput === i && (
+                        <div style={{ 
+                          marginLeft: '44px',
+                          marginRight: '12px',
+                          marginBottom: '12px',
+                          display: 'flex', 
+                          gap: '8px',
+                          padding: '12px',
+                          background: 'transparent',
+                          borderRadius: '8px',
+                          border: '1px solid rgba(255, 255, 255, 0.1)',
+                          borderLeft: '2px solid rgba(255, 255, 255, 0.2)'
+                        }}>
+                          <input 
+                            placeholder="Add sub-subtask..."
+                            value={newSubSubtaskText}
+                            onChange={(e) => setNewSubSubtaskText(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' && newSubSubtaskText.trim()) {
+                                addSubSubtask(i, newSubSubtaskText);
+                              }
+                            }}
+                            style={{ 
+                              background: '#000', 
+                              border: '1px solid rgba(255, 255, 255, 0.1)', 
+                              color: '#fff', 
+                              padding: '8px 12px', 
+                              borderRadius: '6px', 
+                              flex: 1,
+                              fontSize: '14px',
+                              outline: 'none'
+                            }}
+                          />
+                          <button
+                            onClick={() => {
+                              if (newSubSubtaskText.trim()) {
+                                addSubSubtask(i, newSubSubtaskText);
+                              }
+                            }}
+                            style={{
+                              background: 'transparent',
+                              border: '1px solid rgba(255, 255, 255, 0.2)',
+                              color: '#9ca3af',
+                              padding: '8px 16px',
+                              borderRadius: '6px',
+                              cursor: 'pointer',
+                              fontWeight: '600',
+                              fontSize: '14px',
+                              transition: 'all 0.2s'
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.3)';
+                              e.currentTarget.style.color = '#d1d5db';
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.2)';
+                              e.currentTarget.style.color = '#9ca3af';
+                            }}
+                          >
+                            Add
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
 
+            {/* ADD NEW SUBTASK */}
             <div style={{ display: 'flex', gap: '8px' }}>
               <input 
                 value={newSubtaskText} 
                 onChange={(e) => setNewSubtaskText(e.target.value)}
-                placeholder="Add a mini-task..." 
+                placeholder="Add a subtask..." 
                 style={{ 
                   flex: 1, background: '#111', border: '1px solid #333', 
                   color: '#fff', padding: '12px', borderRadius: '8px', outline: 'none' 
                 }}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && newSubtaskText.trim()) {
-                    const updated = [...subtasks, { id: Date.now(), text: newSubtaskText, completed: false }];
+                    const updated = [...subtasks, { id: Date.now(), text: newSubtaskText, completed: false, sub_subtasks: [] }];
                     setSubtasks(updated);
                     onUpdateTask(index, { ...task, text: editedTitle, subtasks: updated });
                     setNewSubtaskText('');
@@ -439,7 +654,7 @@ const ExpandableTask = ({
               <button 
                 onClick={() => {
                   if (newSubtaskText.trim()) {
-                    const updated = [...subtasks, { id: Date.now(), text: newSubtaskText, completed: false }];
+                    const updated = [...subtasks, { id: Date.now(), text: newSubtaskText, completed: false, sub_subtasks: [] }];
                     setSubtasks(updated);
                     onUpdateTask(index, { ...task, text: editedTitle, subtasks: updated });
                     setNewSubtaskText('');
