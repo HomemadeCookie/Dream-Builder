@@ -33,6 +33,9 @@ const ExpandableTask = ({
   const [openSubInput, setOpenSubInput] = useState(null);
   const [newSubSubtaskText, setNewSubSubtaskText] = useState('');
   
+  const [editingSubtask, setEditingSubtask] = useState(null);
+  const [editingSubSubtask, setEditingSubSubtask] = useState(null);
+
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editedTitle, setEditedTitle] = useState(typeof task === 'string' ? task : task.text);
 
@@ -90,6 +93,20 @@ const ExpandableTask = ({
     } else if (editedTitle.trim() === '') {
       setEditedTitle(taskObj.text || task);
     }
+  };
+
+  const handleSubtaskEdit = (subIndex, newText) => {
+    const updated = [...subtasks];
+    updated[subIndex].text = newText;
+    setSubtasks(updated);
+    onUpdateTask(index, { ...task, text: editedTitle, subtasks: updated });
+  };
+
+  const handleSubSubtaskEdit = (subIndex, subSubIndex, newText) => {
+    const updated = [...subtasks];
+    updated[subIndex].sub_subtasks[subSubIndex].text = newText;
+    setSubtasks(updated);
+    onUpdateTask(index, { ...task, text: editedTitle, subtasks: updated });
   };
 
   const handleStopAndSave = () => {
@@ -448,15 +465,38 @@ const ExpandableTask = ({
                           style={{ width: '18px', height: '18px', accentColor: '#22c55e', cursor: 'pointer' }} 
                         />
 
-                        <span style={{
-                          flex: 1,
-                          fontSize: '16px',
-                          textDecoration: (st.completed || allChildrenComplete) ? 'line-through' : 'none',
-                          opacity: (st.completed || allChildrenComplete) ? 0.5 : 1,
-                          color: '#fff'
-                        }}>
-                          {st.text}
-                        </span>
+                        {editingSubtask === (st.id || i) ? (
+                          <input
+                            autoFocus
+                            value={st.text}
+                            onChange={(e) => handleSubtaskEdit(i, e.target.value)}
+                            onBlur={() => setEditingSubtask(null)}
+                            onKeyDown={(e) => e.key === 'Enter' && setEditingSubtask(null)}
+                            style={{ 
+                              flex: 1, 
+                              background: 'transparent', 
+                              border: 'none', 
+                              borderBottom: '1px solid #6b7280', 
+                              color: '#fff', 
+                              fontSize: '16px', 
+                              outline: 'none' 
+                            }}
+                          />
+                        ) : (
+                          <span 
+                            onClick={() => setEditingSubtask(st.id || i)}
+                            style={{
+                              flex: 1,
+                              fontSize: '16px',
+                              textDecoration: (st.completed || allChildrenComplete) ? 'line-through' : 'none',
+                              opacity: (st.completed || allChildrenComplete) ? 0.5 : 1,
+                              color: '#fff',
+                              cursor: 'text'
+                            }}
+                          >
+                            {st.text}
+                          </span>
+                        )}
 
                         {/* ADD SUB-SUBTASK BUTTON - ICON ONLY */}
                         <button
@@ -528,15 +568,38 @@ const ExpandableTask = ({
                             onChange={() => toggleSubSubtask(i, j)}
                             style={{ width: '14px', height: '14px', accentColor: '#22c55e', cursor: 'pointer' }}
                           />
-                          <span style={{ 
-                            fontSize: '14px', 
-                            color: '#d1d5db',
-                            flex: 1,
-                            textDecoration: sst.completed ? 'line-through' : 'none',
-                            opacity: sst.completed ? 0.5 : 1
-                          }}>
-                            {sst.text}
-                          </span>
+                          {editingSubSubtask === (sst.id || `${i}-${j}`) ? (
+                            <input
+                              autoFocus
+                              value={sst.text}
+                              onChange={(e) => handleSubSubtaskEdit(i, j, e.target.value)}
+                              onBlur={() => setEditingSubSubtask(null)}
+                              onKeyDown={(e) => e.key === 'Enter' && setEditingSubSubtask(null)}
+                              style={{ 
+                                flex: 1, 
+                                background: 'transparent', 
+                                border: 'none', 
+                                borderBottom: '1px solid #4b5563', 
+                                color: '#d1d5db', 
+                                fontSize: '14px', 
+                                outline: 'none' 
+                              }}
+                            />
+                          ) : (
+                            <span 
+                              onClick={() => setEditingSubSubtask(sst.id || `${i}-${j}`)}
+                              style={{ 
+                                fontSize: '14px', 
+                                color: '#d1d5db',
+                                flex: 1,
+                                textDecoration: sst.completed ? 'line-through' : 'none',
+                                opacity: sst.completed ? 0.5 : 1,
+                                cursor: 'text'
+                              }}
+                            >
+                              {sst.text}
+                            </span>
+                          )}
                           
                           {/* DELETE SUB-SUBTASK */}
                           <button
