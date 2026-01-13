@@ -92,7 +92,14 @@ function App() {
       </div>
 
       {/* Content */}
-      {currentView === 'dashboard' ? <DreamBuilderDashboard /> : <FriendsFeed />}
+      
+      {/* Keep both mounted, just hide one */}
+      <div style={{ display: currentView === 'dashboard' ? 'block' : 'none' }}>
+        <DreamBuilderDashboard />
+      </div>
+      <div style={{ display: currentView === 'friends' ? 'block' : 'none' }}>
+        <FriendsFeed />
+      </div>
     </div>
   )
 }

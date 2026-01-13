@@ -4,22 +4,8 @@ import { supabaseService } from '../services/supabaseService.js';
 import { offlineService } from '../services/offlineService.js';
 import { supabase } from '../lib/supabase.js';
 import ExpandableTask from './ExpandableTask.js';
+import { storageService } from '../services/storageService.js'
 
-const deduplicateTasks = (tasks) => {
-  if (!tasks || !Array.isArray(tasks)) return [];
-  
-  const seen = new Set();
-  return tasks.filter(task => {
-    const taskText = typeof task === 'string' ? task : task.text;
-    const taskId = task.id || taskText;
-    
-    if (seen.has(taskId)) {
-      return false; // Skip duplicate
-    }
-    seen.add(taskId);
-    return true;
-  });
-};
 
 const EditableText = ({ value, onSave }) => {
   const [isEditing, setIsEditing] = useState(false);
@@ -199,284 +185,125 @@ const RadarChart = ({ data }) => {
 // Replace the apiService in DreamBuilderDashboard.js with this:
 // Import at the top: import { offlineService } from '../services/offlineService.js'
 
+// Replace your apiService.initialize with this version:
+
 const apiService = {
   initialize: async () => {
-    let supabaseData = null;
-    try {
-      const isAuth = await supabaseService.isAuthenticated()
-      
-      if (isAuth) {
-        const { data: { user } } = await supabase.auth.getUser()
-        console.log('User authenticated, loading from Supabase...');
-        
-        // Try to load from Supabase first
-        supabaseData = await supabaseService.loadFromSupabase()
-        
-        console.log('Loaded Supabase data:', supabaseData);
-        
-        if (supabaseData) {
-          // Save to IndexedDB for offline use
-          const dataArray = Object.entries(supabaseData).filter(([key]) => key !== 'overall')
-          
-          for (const [areaType, areaData] of dataArray) {
-            console.log(`Saving ${areaType} to IndexedDB:`, areaData);
-            
-            const existingArea = await offlineService.getAreaByType(user.id, areaType)
-            
-            if (existingArea) {
-              await offlineService.saveArea({
-                ...existingArea,
-                ...areaData,
-                user_id: user.id,
-                area_type: areaType,
-                synced: true
-              })
-            } else {
-              await offlineService.saveArea({
-                ...areaData,
-                user_id: user.id,
-                area_type: areaType,
-                synced: true
-              })
-            }
-          }
-          
-          // Also save to localStorage - CRITICAL: This is what fetchFields reads!
-          console.log('Saving to localStorage:', supabaseData);
-          localStorage.setItem('dreamBuilderData', JSON.stringify(supabaseData))
-          return
-        }
-      }
-      
-      // Fallback to localStorage
-      const stored = localStorage.getItem('dreamBuilderData')
-      console.log('Loading from localStorage:', stored ? JSON.parse(stored) : 'No data');
-      
-      if (!stored && !supabaseData) {
-        console.log('No data found, creating default data...');
-        const defaultData = {
-          overall: {
-            id: 'overall',
-            name: 'Overall',
-            icon: '🎯',
-            goal: 'Become the best version of myself',
-            progress: 0,
-            timeSpent: 0,
-            milestones: 0,
-            streak: 0,
-            nextSteps: []
-          },
-          business: {
-            id: 'business',
-            name: 'Business',
-            icon: '💼',
-            goal: 'Make a $1,000,000',
-            progress: 25,
-            timeSpent: 120,
-            milestones: 5,
-            streak: 12,
-            nextSteps: [
-              { 
-                id: 'biz-1',
-                text: 'Get resort client', 
-                subtasks: [
-                  { id: 'biz-1-sub-1', text: 'Research resort websites', completed: false },
-                  { id: 'biz-1-sub-2', text: 'Prepare pitch deck', completed: false }
-                ], 
-                completed: false 
-              },
-              { 
-                id: 'biz-2',
-                text: 'Find business thesis idea', 
-                subtasks: [], 
-                completed: false 
-              }
-            ],
-          },
-          tech: {
-            id: 'tech',
-            name: 'Tech',
-            icon: '⚡',
-            progress: 0,
-            timeSpent: 0,
-            goal: 'Master full-stack development',
-            nextSteps: [
-              { id: 'tech-1', text: 'Develop Fullstack App', subtasks: [], completed: false },
-              { id: 'tech-2', text: 'Find Full-time Gig', subtasks: [], completed: false }
-            ],
-            milestones: 0,
-            streak: 0
-          },
-          physical: {
-            id: 'physical',
-            name: 'Physical',
-            icon: '💪',
-            progress: 0,
-            timeSpent: 0,
-            goal: 'Run a half marathon',
-            nextSteps: [
-              { id: 'phys-1', text: 'Increase weekly mileage to 30km', subtasks: [], completed: false },
-            ],
-            milestones: 0,
-            streak: 0
-          },
-          social: {
-            id: 'social',
-            name: 'Social',
-            icon: '🤝',
-            progress: 0,
-            timeSpent: 0,
-            goal: 'Build meaningful connections',
-            nextSteps: [
-              { id: 'soc-1', text: 'Attend networking events', subtasks: [], completed: false },
-            ],
-            milestones: 0,
-            streak: 0
-          },
-          misc: {
-            id: 'misc',
-            name: 'Misc',
-            icon: '✨',
-            progress: 0,
-            timeSpent: 0,
-            goal: 'Creative expression',
-            nextSteps: [
-              { id: 'misc-1', text: 'Practice guitar', subtasks: [], completed: false },
-            ],
-            milestones: 0,
-            streak: 0
-          }
-        }
-        localStorage.setItem('dreamBuilderData', JSON.stringify(defaultData))
-      }
-    } catch (error) {
-      console.error('Error initializing:', error)
-      // Continue with localStorage fallback
-    }
-  },
-  
-  fetchFields: async () => {
-    try {
-      const stored = localStorage.getItem('dreamBuilderData')
-      const data = stored ? JSON.parse(stored) : {};
-      console.log('fetchFields returning:', data);
-      return data;
-    } catch (error) {
-      console.error('Error fetching fields:', error)
-      return {}
-    }
+    return await storageService.initialize()
   },
   
   updateProgress: async (fieldId, newProgress) => {
-    const data = JSON.parse(localStorage.getItem('dreamBuilderData') || '{}')
+    const data = await storageService.loadData()
     if (data[fieldId]) {
       data[fieldId].progress = newProgress
-      localStorage.setItem('dreamBuilderData', JSON.stringify(data))
-    }
-    
-    const isAuth = await supabaseService.isAuthenticated()
-    if (isAuth) {
-      await supabaseService.syncToSupabase(data)
+      await storageService.saveData(data)
     }
   },
   
   updateGoal: async (fieldId, newGoal) => {
-    const data = JSON.parse(localStorage.getItem('dreamBuilderData') || '{}')
+    const data = await storageService.loadData()
     if (data[fieldId]) {
       data[fieldId].goal = newGoal
-      localStorage.setItem('dreamBuilderData', JSON.stringify(data))
-    }
-    
-    const isAuth = await supabaseService.isAuthenticated()
-    if (isAuth) {
-      await supabaseService.syncToSupabase(data)
+      await storageService.saveData(data)
     }
   },
   
   updateNextSteps: async (fieldId, nextSteps) => {
-    const data = JSON.parse(localStorage.getItem('dreamBuilderData') || '{}')
+    const data = await storageService.loadData()
     if (data[fieldId]) {
-      data[fieldId].nextSteps = nextSteps
-      localStorage.setItem('dreamBuilderData', JSON.stringify(data))
-    }
-    
-    const isAuth = await supabaseService.isAuthenticated()
-    if (isAuth) {
-      await supabaseService.syncToSupabase(data)
+      const uniqueSteps = deduplicateTasks(nextSteps)
+      data[fieldId].nextSteps = uniqueSteps
+      await storageService.saveData(data)
     }
   },
   
   addNextStep: async (fieldId, step) => {
-    const data = JSON.parse(localStorage.getItem('dreamBuilderData') || '{}')
+    const data = await storageService.loadData()
     if (data[fieldId]) {
       data[fieldId].nextSteps = data[fieldId].nextSteps || []
       data[fieldId].nextSteps.push(step)
-      localStorage.setItem('dreamBuilderData', JSON.stringify(data))
-    }
-    
-    const isAuth = await supabaseService.isAuthenticated()
-    if (isAuth) {
-      await supabaseService.syncToSupabase(data)
+      data[fieldId].nextSteps = deduplicateTasks(data[fieldId].nextSteps)
+      await storageService.saveData(data)
     }
   },
   
   addTimeSpent: async (fieldId, hours) => {
-    const data = JSON.parse(localStorage.getItem('dreamBuilderData') || '{}')
+    const data = await storageService.loadData()
     if (data[fieldId]) {
       data[fieldId].timeSpent = (data[fieldId].timeSpent || 0) + hours
-      localStorage.setItem('dreamBuilderData', JSON.stringify(data))
-    }
-    
-    const isAuth = await supabaseService.isAuthenticated()
-    if (isAuth) {
-      await supabaseService.syncToSupabase(data)
+      await storageService.saveData(data)
     }
   },
 
   updateStreak: async (fieldId, newStreak) => {
-    const data = JSON.parse(localStorage.getItem('dreamBuilderData') || '{}')
+    const data = await storageService.loadData()
     if (data[fieldId]) {
       data[fieldId].streak = newStreak
-      localStorage.setItem('dreamBuilderData', JSON.stringify(data))
-    }
-    
-    const isAuth = await supabaseService.isAuthenticated()
-    if (isAuth) {
-      await supabaseService.syncToSupabase(data)
+      await storageService.saveData(data)
     }
   },
 
   updateMilestones: async (fieldId, newMilestones) => {
-    const data = JSON.parse(localStorage.getItem('dreamBuilderData') || '{}')
+    const data = await storageService.loadData()
     if (data[fieldId]) {
       data[fieldId].milestones = newMilestones
-      localStorage.setItem('dreamBuilderData', JSON.stringify(data))
+      await storageService.saveData(data)
     }
+  },
+  
+  fetchFields: async () => {
+    const data = await storageService.loadData()
+    if (!data) return {}
     
-    const isAuth = await supabaseService.isAuthenticated()
-    if (isAuth) {
-      await supabaseService.syncToSupabase(data)
-    }
+    
+    return data
   },
   
   getUnsyncedCount: async () => {
-    try {
-      const unsynced = await offlineService.getUnsyncedOperations()
-      return unsynced.length
-    } catch (error) {
-      console.error('Error getting unsynced count:', error)
-      return 0
-    }
+    const needsSync = await storageService.checkNeedsSync()
+    return needsSync ? 1 : 0
   },
   
+  // UPDATED: Now returns the sync result
   syncOfflineData: async () => {
-    const isAuth = await supabaseService.isAuthenticated()
-    if (isAuth) {
-      const data = JSON.parse(localStorage.getItem('dreamBuilderData') || '{}')
-      await supabaseService.syncToSupabase(data)
-    }
+    return await storageService.syncToCloud()
   }
 }
+
+
+// Helper function
+const deduplicateTasks = (tasks) => {
+  if (!tasks || !Array.isArray(tasks)) return []
+  
+  const seen = new Set()
+  const uniqueTasks = []
+  
+  tasks.forEach(task => {
+    const taskObj = typeof task === 'string' 
+      ? { text: task, subtasks: [], id: `temp-${Date.now()}-${Math.random()}` } 
+      : task
+    
+    // ALWAYS use the id - don't fall back to text
+    const taskId = taskObj.id
+    
+    if (!taskId) {
+      // If no ID exists, this is a bug - but add it with a warning
+      console.warn('Task without ID found:', taskObj)
+      uniqueTasks.push(taskObj)
+      return
+    }
+    
+    if (!seen.has(taskId)) {
+      seen.add(taskId)
+      uniqueTasks.push(taskObj)
+    } else {
+      console.log('🔄 Skipping duplicate task ID:', taskId, taskObj.text)
+    }
+  })
+  
+  return uniqueTasks
+}
+
 
 const DreamBuilderDashboard = () => {
   const isMobile = window.innerWidth < 768;
@@ -519,51 +346,41 @@ const DreamBuilderDashboard = () => {
 
     try {
       await apiService.updateNextSteps(selectedField, uniqueSteps);
-      await loadFields();
     } catch (error) {
       console.error('Error updating next step:', error);
     }
   };
 
   const addNextStep = async () => {
+    const newId = `task-${Date.now()}`;
     const newStep = { 
       text: "New Step", 
       subtasks: [], 
       completed: false,
-      id: Date.now() // Unique ID helps with deduplication
+      id: newId
     };
     
     const updatedSteps = [...nextSteps, newStep];
-    
-    // FIX: Deduplicate before saving
     const uniqueSteps = deduplicateTasks(updatedSteps);
     setNextSteps(uniqueSteps);
     
     try {
-      await apiService.addNextStep(selectedField, newStep);
-      await loadFields();
+      await apiService.updateNextSteps(selectedField, uniqueSteps);
     } catch (error) {
       console.error('Error adding next step:', error);
     }
   };
 
   const deleteNextStep = async (indexToDelete) => {
+    const taskToDelete = nextSteps[indexToDelete];
+    const taskId = taskToDelete.id || `task-${indexToDelete}`;
+    
     const updatedSteps = nextSteps.filter((_, idx) => idx !== indexToDelete);
     setNextSteps(updatedSteps);
     
-    // Update checked steps - reindex them
-    const newCheckedSteps = {};
-    Object.keys(checkedSteps).forEach(key => {
-      const oldIndex = parseInt(key);
-      if (oldIndex < indexToDelete) {
-        // Keep same index
-        newCheckedSteps[oldIndex] = checkedSteps[key];
-      } else if (oldIndex > indexToDelete) {
-        // Shift index down by 1
-        newCheckedSteps[oldIndex - 1] = checkedSteps[key];
-      }
-      // Skip the deleted index
-    });
+    // Update checked steps - remove by ID
+    const newCheckedSteps = { ...checkedSteps };
+    delete newCheckedSteps[taskId];
     
     setCheckedSteps(newCheckedSteps);
     stepStorageService.saveCheckedSteps(selectedField, newCheckedSteps);
@@ -578,7 +395,6 @@ const DreamBuilderDashboard = () => {
     
     try {
       await apiService.updateNextSteps(selectedField, updatedSteps);
-      await loadFields();
     } catch (error) {
       console.error('Error deleting next step:', error);
     }
@@ -615,6 +431,7 @@ const DreamBuilderDashboard = () => {
     }
   };
 
+
   const checkUnsyncedData = async () => {
     try {
       const count = await apiService.getUnsyncedCount();
@@ -627,16 +444,26 @@ const DreamBuilderDashboard = () => {
   const syncData = async () => {
     try {
       setSyncing(true);
-      await apiService.syncOfflineData();
-      await loadFields();
-      await checkUnsyncedData();
+      console.log('🔄 Manual sync triggered...');
+      
+      const result = await apiService.syncOfflineData();
+      
+      if (result && result.success) {
+        console.log('✅ Sync completed successfully:', result);
+        await loadFields();
+        await checkUnsyncedData();
+      } else {
+        console.log('⚠️ Sync completed with issues:', result);
+        // Still reload to show current state
+        await loadFields();
+        await checkUnsyncedData();
+      }
     } catch (error) {
-      console.error('Error syncing data:', error);
+      console.error('❌ Error syncing data:', error);
     } finally {
       setSyncing(false);
     }
   };
-
 
   // For Next Steps
 
@@ -647,26 +474,72 @@ const DreamBuilderDashboard = () => {
 
   // Add these storage functions with your other apiService methods
   const stepStorageService = {
-    saveCheckedSteps: (fieldId, steps) => {
-      const allSteps = JSON.parse(localStorage.getItem('checkedSteps') || '{}');
-      allSteps[fieldId] = steps;
-      localStorage.setItem('checkedSteps', JSON.stringify(allSteps));
+    saveCheckedSteps: async (fieldId, steps) => {
+      await storageService.init();
+      return new Promise((resolve, reject) => {
+        const transaction = storageService.db.transaction(['dreamData'], 'readwrite');
+        const store = transaction.objectStore('dreamData');
+        const key = `checkedSteps_${fieldId}`;
+        
+        const request = store.put({
+          id: key,
+          data: steps,
+          lastModified: Date.now(),
+          needsSync: false
+        });
+        
+        request.onsuccess = () => resolve();
+        request.onerror = () => reject(request.error);
+      });
     },
     
-    loadCheckedSteps: (fieldId) => {
-      const allSteps = JSON.parse(localStorage.getItem('checkedSteps') || '{}');
-      return allSteps[fieldId] || {};
+    loadCheckedSteps: async (fieldId) => {
+      await storageService.init();
+      return new Promise((resolve, reject) => {
+        const transaction = storageService.db.transaction(['dreamData'], 'readonly');
+        const store = transaction.objectStore('dreamData');
+        const key = `checkedSteps_${fieldId}`;
+        const request = store.get(key);
+        
+        request.onsuccess = () => {
+          resolve(request.result?.data || {});
+        };
+        request.onerror = () => reject(request.error);
+      });
     },
     
-    saveLastCheckDate: (fieldId, date) => {
-      const dates = JSON.parse(localStorage.getItem('lastCheckDates') || '{}');
-      dates[fieldId] = date;
-      localStorage.setItem('lastCheckDates', JSON.stringify(dates));
+    saveLastCheckDate: async (fieldId, date) => {
+      await storageService.init();
+      return new Promise((resolve, reject) => {
+        const transaction = storageService.db.transaction(['dreamData'], 'readwrite');
+        const store = transaction.objectStore('dreamData');
+        const key = `lastCheckDate_${fieldId}`;
+        
+        const request = store.put({
+          id: key,
+          data: date,
+          lastModified: Date.now(),
+          needsSync: false
+        });
+        
+        request.onsuccess = () => resolve();
+        request.onerror = () => reject(request.error);
+      });
     },
     
-    loadLastCheckDate: (fieldId) => {
-      const dates = JSON.parse(localStorage.getItem('lastCheckDates') || '{}');
-      return dates[fieldId] || null;
+    loadLastCheckDate: async (fieldId) => {
+      await storageService.init();
+      return new Promise((resolve, reject) => {
+        const transaction = storageService.db.transaction(['dreamData'], 'readonly');
+        const store = transaction.objectStore('dreamData');
+        const key = `lastCheckDate_${fieldId}`;
+        const request = store.get(key);
+        
+        request.onsuccess = () => {
+          resolve(request.result?.data || null);
+        };
+        request.onerror = () => reject(request.error);
+      });
     }
   };
 
@@ -700,7 +573,22 @@ const DreamBuilderDashboard = () => {
   };
 
 
-
+  useEffect(() => {
+    // Only save if we have a currentField and nextSteps have been initialized
+    if (currentField && nextSteps.length > 0) {
+      const saveSubtasks = async () => {
+        try {
+          await apiService.updateNextSteps(selectedField, nextSteps);
+        } catch (error) {
+          console.error('Error auto-saving subtasks:', error);
+        }
+      };
+      
+      // Debounce the save to avoid too many calls
+      const timeoutId = setTimeout(saveSubtasks, 500);
+      return () => clearTimeout(timeoutId);
+    }
+  }, [nextSteps]);
 
 
   useEffect(() => {
@@ -734,95 +622,110 @@ const DreamBuilderDashboard = () => {
   // Timer
 
   // Add these timer storage functions after stepStorageService
-  const saveTimerState = (fieldId, seconds, accumulated, running) => {
-    const allTimers = JSON.parse(localStorage.getItem('allTimerStates') || '{}');
-    allTimers[fieldId] = {
-      seconds,
-      accumulated,
-      running,
-      timestamp: Date.now()
-    };
-    localStorage.setItem('allTimerStates', JSON.stringify(allTimers));
-    if (running) {
-      localStorage.setItem('activeTimerField', fieldId);
-    } else {
-      // Clear active timer if this was the running one
-      const activeField = localStorage.getItem('activeTimerField');
-      if (activeField === fieldId) {
-        localStorage.removeItem('activeTimerField');
-      }
-    }
-  };
-
-  const loadTimerState = (fieldId) => {
-    const allTimers = JSON.parse(localStorage.getItem('allTimerStates') || '{}');
-    const state = allTimers[fieldId];
-    const isPageLoad = !window.timerInitialized; // Check if this is initial page load
-    
-    if (state) {
-      if (state.running) {
-        const elapsed = Math.floor((Date.now() - state.timestamp) / 1000);
-        return {
-          seconds: state.seconds + elapsed,
-          accumulated: state.accumulated,
-          running: isPageLoad ? false : true  // Only pause on page load, not field switch
-        };
-      }
-      return state;
-    }
-    return { seconds: 0, accumulated: 0, running: false };
-  };
-
-  // Update this useEffect
-  useEffect(() => {
-  if (currentField) {
-    setCurrentGoal(currentField.goal || "");
-    
-    // FIX: Deduplicate tasks before setting
-    const uniqueTasks = deduplicateTasks(currentField.nextSteps || []);
-    setNextSteps(uniqueTasks);
-    
-    // Load checked steps for this field
-    const loadedCheckedSteps = stepStorageService.loadCheckedSteps(selectedField);
-    setCheckedSteps(loadedCheckedSteps);
-    
-    // Load last check date
-    const loadedLastCheckDate = stepStorageService.loadLastCheckDate(selectedField);
-    setLastCheckDate(loadedLastCheckDate);
-    
-    // Calculate today's completed count
-    const todayCount = countTodayCompleted(loadedCheckedSteps);
-    setTodayCompletedCount(todayCount);
-    
-    // Load timer state for this field
-    const savedTimer = loadTimerState(selectedField);
-    if (savedTimer) {
-      setFieldTimers(prev => ({
-        ...prev,
-        [selectedField]: savedTimer
-      }));
+  const saveTimerState = async (fieldId, seconds, accumulated, running) => {
+    await storageService.init();
+    return new Promise((resolve, reject) => {
+      const transaction = storageService.db.transaction(['dreamData'], 'readwrite');
+      const store = transaction.objectStore('dreamData');
+      const key = `timer_${fieldId}`;
       
-      // If timer is running and no interval exists, start it
-      if (savedTimer.running && !timerIntervalRef.current) {
-        timerIntervalRef.current = setInterval(() => {
-          setFieldTimers(prev => {
-            const newTimers = { ...prev };
-            Object.keys(newTimers).forEach(fieldId => {
-              if (newTimers[fieldId]?.running) {
-                newTimers[fieldId] = {
-                  ...newTimers[fieldId],
-                  seconds: newTimers[fieldId].seconds + 1
-                };
-                saveTimerState(fieldId, newTimers[fieldId].seconds, newTimers[fieldId].accumulated, true);
-              }
+      const request = store.put({
+        id: key,
+        data: {
+          seconds,
+          accumulated,
+          running,
+          timestamp: Date.now()
+        },
+        lastModified: Date.now(),
+        needsSync: false
+      });
+      
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(request.error);
+    });
+  };
+
+  const loadTimerState = async (fieldId) => {
+    await storageService.init();
+    return new Promise((resolve, reject) => {
+      const transaction = storageService.db.transaction(['dreamData'], 'readonly');
+      const store = transaction.objectStore('dreamData');
+      const key = `timer_${fieldId}`;
+      const request = store.get(key);
+      
+      request.onsuccess = () => {
+        const state = request.result?.data;
+        const isPageLoad = !window.timerInitialized;
+        
+        if (state) {
+          if (state.running) {
+            const elapsed = Math.floor((Date.now() - state.timestamp) / 1000);
+            resolve({
+              seconds: state.seconds + elapsed,
+              accumulated: state.accumulated,
+              running: isPageLoad ? false : true
             });
-            return newTimers;
-          });
-        }, 1000);
-      }
+          } else {
+            resolve(state);
+          }
+        } else {
+          resolve({ seconds: 0, accumulated: 0, running: false });
+        }
+      };
+      request.onerror = () => reject(request.error);
+    });
+  };
+
+
+  useEffect(() => {
+    if (currentField) {
+      setCurrentGoal(currentField.goal || "");
+      
+      const uniqueTasks = deduplicateTasks(currentField.nextSteps || []);
+      console.log(`🎯 [UI] Loading ${selectedField} area with ${uniqueTasks.length} steps`);
+      console.log(`🎯 [UI] Steps:`, uniqueTasks.map(s => s.text || s));
+      setNextSteps(uniqueTasks);
+      
+      // Make these async calls properly
+      (async () => {
+        const loadedCheckedSteps = await stepStorageService.loadCheckedSteps(selectedField);
+        setCheckedSteps(loadedCheckedSteps);
+        
+        const loadedLastCheckDate = await stepStorageService.loadLastCheckDate(selectedField);
+        setLastCheckDate(loadedLastCheckDate);
+        
+        const todayCount = countTodayCompleted(loadedCheckedSteps);
+        setTodayCompletedCount(todayCount);
+        
+        const savedTimer = await loadTimerState(selectedField);
+        if (savedTimer) {
+          setFieldTimers(prev => ({
+            ...prev,
+            [selectedField]: savedTimer
+          }));
+          
+          if (savedTimer.running && !timerIntervalRef.current) {
+            timerIntervalRef.current = setInterval(() => {
+              setFieldTimers(prev => {
+                const newTimers = { ...prev };
+                Object.keys(newTimers).forEach(fieldId => {
+                  if (newTimers[fieldId]?.running) {
+                    newTimers[fieldId] = {
+                      ...newTimers[fieldId],
+                      seconds: newTimers[fieldId].seconds + 1
+                    };
+                    saveTimerState(fieldId, newTimers[fieldId].seconds, newTimers[fieldId].accumulated, true);
+                  }
+                });
+                return newTimers;
+              });
+            }, 1000);
+          }
+        }
+      })();
     }
-  }
-}, [selectedField, fields, currentField]);
+  }, [selectedField]);// ONLY depend on selectedField, not fields or currentField
 
   // Add this new useEffect to check streak at midnight
   useEffect(() => {
@@ -1030,32 +933,28 @@ const DreamBuilderDashboard = () => {
   };
 
   // Handle checking a step
-  const handleCheckStep = async (stepIndex) => {
+  const handleCheckStep = async (taskId) => {
     const today = getTodayString();
     const newCheckedSteps = {
       ...checkedSteps,
-      [stepIndex]: { checked: true, date: today }
+      [taskId]: { checked: true, date: today }
     };
     
     setCheckedSteps(newCheckedSteps);
-    stepStorageService.saveCheckedSteps(selectedField, newCheckedSteps);
+    await stepStorageService.saveCheckedSteps(selectedField, newCheckedSteps); // ADD await
     
-    // Update last check date if this is the first check today
     const wasCheckedToday = Object.values(checkedSteps).some(step => step.date === today);
     if (!wasCheckedToday) {
-      stepStorageService.saveLastCheckDate(selectedField, today);
+      await stepStorageService.saveLastCheckDate(selectedField, today); // ADD await
       setLastCheckDate(today);
     }
     
-    // Calculate and update streak
     const newStreak = calculateStreak(selectedField, newCheckedSteps);
     await apiService.updateStreak(selectedField, newStreak);
     
-    // Update milestones (total completed)
     const completedCount = Object.values(newCheckedSteps).filter(s => s.checked).length;
     await apiService.updateMilestones(selectedField, completedCount);
     
-    // Update today's count
     const todayCount = countTodayCompleted(newCheckedSteps);
     setTodayCompletedCount(todayCount);
     
@@ -1063,30 +962,26 @@ const DreamBuilderDashboard = () => {
   };
 
   // Handle unchecking a step
-  const handleUncheckStep = async (stepIndex) => {
+  const handleUncheckStep = async (taskId) => {
     const today = getTodayString();
-    const stepToUncheck = checkedSteps[stepIndex];
+    const stepToUncheck = checkedSteps[taskId];
     
-    // Only allow unchecking if it was checked today
     if (!stepToUncheck || stepToUncheck.date !== today) {
       return;
     }
     
     const newCheckedSteps = { ...checkedSteps };
-    delete newCheckedSteps[stepIndex];
+    delete newCheckedSteps[taskId];
     
     setCheckedSteps(newCheckedSteps);
-    stepStorageService.saveCheckedSteps(selectedField, newCheckedSteps);
+    await stepStorageService.saveCheckedSteps(selectedField, newCheckedSteps); // ADD await
     
-    // Recalculate streak (might go to 0 if this was the only check today)
     const newStreak = calculateStreak(selectedField, newCheckedSteps);
     await apiService.updateStreak(selectedField, newStreak);
     
-    // Update milestones
     const completedCount = Object.values(newCheckedSteps).filter(s => s.checked).length;
     await apiService.updateMilestones(selectedField, completedCount);
     
-    // Update today's count
     const todayCount = countTodayCompleted(newCheckedSteps);
     setTodayCompletedCount(todayCount);
     
@@ -1720,39 +1615,41 @@ const DreamBuilderDashboard = () => {
                       paddingRight: '8px'
                     }}>
                       {nextSteps.map((step, idx) => {
-                        const isChecked = checkedSteps[idx]?.checked;
-                        const checkDate = checkedSteps[idx]?.date;
+                        const taskObj = typeof step === 'string' 
+                          ? { text: step, subtasks: [], id: `task-${idx}` }
+                          : { ...step, id: step.id || `task-${idx}` };
+                        
+                        const taskId = taskObj.id;
+                        const isChecked = checkedSteps[taskId]?.checked;
+                        const checkDate = checkedSteps[taskId]?.date;
                         const today = getTodayString();
                         const canUndo = isChecked && checkDate === today;
                         
-                        // Convert string tasks to object format
-                        const taskObj = typeof step === 'string' 
-                          ? { text: step, subtasks: [], id: `${selectedField}-${idx}` }
-                          : { ...step, id: step.id || `${selectedField}-${idx}` };
-                        
-                        // Create a stable unique key combining field and index
-                        const uniqueKey = `${selectedField}-task-${taskObj.id || idx}`;
+                        const uniqueKey = `${selectedField}-task-${taskId}`;
                         
                         return (
                           <ExpandableTask
-                            key={uniqueKey}  // Use stable unique key
+                            key={uniqueKey}
                             task={taskObj}
                             index={idx}
                             onUpdateTask={async (index, updatedTask) => {
+                              // Ensure task has an ID
+                              if (!updatedTask.id) {
+                                updatedTask.id = taskObj.id;
+                              }
+                              
                               const newSteps = [...nextSteps];
                               newSteps[index] = updatedTask;
                               
-                              // Deduplicate before saving
                               const uniqueSteps = deduplicateTasks(newSteps);
                               setNextSteps(uniqueSteps);
                               
                               await apiService.updateNextSteps(selectedField, uniqueSteps);
-                              await loadFields();
                             }}
                             onDeleteTask={deleteNextStep}
                             isChecked={isChecked}
-                            onCheck={handleCheckStep}
-                            onUncheck={handleUncheckStep}
+                            onCheck={() => handleCheckStep(taskId)}
+                            onUncheck={() => handleUncheckStep(taskId)}
                             canUndo={canUndo}
                             onTimeComplete={async (hours) => {
                               await apiService.addTimeSpent(selectedField, hours);

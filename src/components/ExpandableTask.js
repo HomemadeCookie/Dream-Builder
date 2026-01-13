@@ -14,10 +14,159 @@ const theme = {
   yellow: '#eab308'
 };
 
+// Fireworks Component
+const Fireworks = ({ isActive, onComplete }) => {
+  const canvasRef = useRef(null);
+  const particles = useRef([]);
+  const rockets = useRef([]);
+  const animationFrameId = useRef(null);
+  const startTime = useRef(null);
+
+  useEffect(() => {
+    if (!isActive || !canvasRef.current) return;
+
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d');
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+
+    particles.current = [];
+    rockets.current = [];
+    startTime.current = Date.now();
+
+    const colors = ['#dc2626', '#e11d48', '#22c55e', '#eab308', '#3b82f6', '#a855f7', '#ec4899'];
+
+    // Create a rocket
+    const createRocket = () => {
+      rockets.current.push({
+        x: Math.random() * canvas.width,
+        y: canvas.height,
+        targetY: Math.random() * canvas.height * 0.4 + 50,
+        speed: Math.random() * 3 + 5,
+        color: colors[Math.floor(Math.random() * colors.length)],
+        exploded: false
+      });
+    };
+
+    // Create explosion particles
+    const explode = (x, y, color) => {
+      const particleCount = 80;
+      for (let i = 0; i < particleCount; i++) {
+        const angle = (Math.PI * 2 * i) / particleCount;
+        const speed = Math.random() * 4 + 2;
+        particles.current.push({
+          x,
+          y,
+          vx: Math.cos(angle) * speed,
+          vy: Math.sin(angle) * speed,
+          life: 1,
+          color,
+          size: Math.random() * 3 + 2
+        });
+      }
+    };
+
+    // Launch initial rockets
+    for (let i = 0; i < 3; i++) {
+      setTimeout(() => createRocket(), i * 400);
+    }
+
+    const animate = () => {
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.1)';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // Update and draw rockets
+      rockets.current.forEach((rocket, i) => {
+        if (!rocket.exploded) {
+          rocket.y -= rocket.speed;
+          
+          // Draw rocket trail
+          ctx.fillStyle = rocket.color;
+          ctx.fillRect(rocket.x - 2, rocket.y, 4, 10);
+
+          // Check if reached target
+          if (rocket.y <= rocket.targetY) {
+            rocket.exploded = true;
+            explode(rocket.x, rocket.y, rocket.color);
+          }
+        }
+      });
+
+      // Update and draw particles
+      particles.current = particles.current.filter(p => {
+        p.x += p.vx;
+        p.y += p.vy;
+        p.vy += 0.05; // gravity
+        p.vx *= 0.99; // air resistance
+        p.life -= 0.01;
+
+        if (p.life > 0) {
+          ctx.globalAlpha = p.life;
+          ctx.fillStyle = p.color;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.globalAlpha = 1;
+          return true;
+        }
+        return false;
+      });
+
+      // Launch new rockets periodically
+      const elapsed = Date.now() - startTime.current;
+      if (elapsed < 3000 && Math.random() < 0.03) {
+        createRocket();
+      }
+
+      // Check if animation should end
+      if (elapsed > 4000 && particles.current.length === 0 && rockets.current.every(r => r.exploded)) {
+        cancelAnimationFrame(animationFrameId.current);
+        if (onComplete) onComplete();
+      } else {
+        animationFrameId.current = requestAnimationFrame(animate);
+      }
+    };
+
+    animate();
+
+    return () => {
+      if (animationFrameId.current) {
+        cancelAnimationFrame(animationFrameId.current);
+      }
+    };
+  }, [isActive, onComplete]);
+
+  if (!isActive) return null;
+
+  return (
+    <canvas
+      ref={canvasRef}
+      style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        width: '100%',
+        height: '100%',
+        pointerEvents: 'none',
+        zIndex: 10000,
+        background: 'rgba(0, 0, 0, 0.3)'
+      }}
+    />
+  );
+};
+
+// Vibration utility
+const triggerVibration = (pattern = [100, 50, 100]) => {
+  if ('vibrate' in navigator) {
+    navigator.vibrate(pattern);
+  }
+};
+
 const ExpandableTask = ({ 
   task, index, onUpdateTask, onDeleteTask, isChecked, onCheck, onUncheck, canUndo, onTimeComplete 
 }) => {
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  const [showFireworks, setShowFireworks] = useState(false);
 
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth < 768);
@@ -42,6 +191,7 @@ const ExpandableTask = ({
   const [subtasks, setSubtasks] = useState([]);
   
   const prevTaskTextRef = useRef();
+  const prevCompletionRef = useRef(false);
   
   useEffect(() => {
     const taskObj = typeof task === 'string' ? { text: task, subtasks: [] } : task;
@@ -55,17 +205,20 @@ const ExpandableTask = ({
     prevTaskTextRef.current = currentTaskText;
   }, [task, isEditingTitle]);
 
+  // Sync ref with checked state
+  useEffect(() => {
+    prevCompletionRef.current = isChecked;
+  }, [isChecked]);
+
   // RECURSIVE PROGRESS CALCULATION
   const calculateWeightedProgress = (subs) => {
     if (!subs || subs.length === 0) return 0;
     
     const totalWeight = subs.reduce((acc, sub) => {
       if (sub.sub_subtasks && sub.sub_subtasks.length > 0) {
-        // If it has children, its progress is the average of children
         const childrenCompleted = sub.sub_subtasks.filter(sst => sst.completed).length;
         return acc + (childrenCompleted / sub.sub_subtasks.length);
       }
-      // If no children, it's a simple 1 (done) or 0 (not done)
       return acc + (sub.completed ? 1 : 0);
     }, 0);
 
@@ -124,17 +277,38 @@ const ExpandableTask = ({
     const subtask = updated[subtaskIndex];
     
     if (subtask.sub_subtasks && subtask.sub_subtasks.length > 0) {
-      // If has children, toggle all children
       const allComplete = subtask.sub_subtasks.every(s => s.completed);
       subtask.sub_subtasks = subtask.sub_subtasks.map(s => ({ ...s, completed: !allComplete }));
       subtask.completed = !allComplete;
     } else {
-      // Simple toggle
       subtask.completed = !subtask.completed;
     }
     
     setSubtasks(updated);
     onUpdateTask(index, { ...task, text: editedTitle, subtasks: updated });
+    
+    // Check if task is now fully complete
+    const isNowComplete = updated.every(st => {
+      if (st.sub_subtasks && st.sub_subtasks.length > 0) {
+        return st.sub_subtasks.every(sst => sst.completed);
+      }
+      return st.completed;
+    });
+
+    // If main task was checked but subtasks are no longer all complete, uncheck it
+    if (isChecked && !isNowComplete) {
+      onUncheck(index);
+      prevCompletionRef.current = false;
+    }
+    // Only trigger if this is a NEW completion
+    else if (!prevCompletionRef.current && isNowComplete) {
+      triggerVibration([200, 100, 200]);
+      if (!showFireworks) {
+        setShowFireworks(true);
+      }
+      onCheck(index); // Auto-check the main task
+      prevCompletionRef.current = true;
+    }
   };
 
   // Toggle sub-subtask
@@ -143,12 +317,34 @@ const ExpandableTask = ({
     updated[subtaskIndex].sub_subtasks[subSubtaskIndex].completed = 
       !updated[subtaskIndex].sub_subtasks[subSubtaskIndex].completed;
     
-    // Check if parent should be marked complete
     const allChildrenComplete = updated[subtaskIndex].sub_subtasks.every(s => s.completed);
     updated[subtaskIndex].completed = allChildrenComplete;
     
     setSubtasks(updated);
     onUpdateTask(index, { ...task, text: editedTitle, subtasks: updated });
+    
+    // Check if task is now fully complete
+    const isNowComplete = updated.every(st => {
+      if (st.sub_subtasks && st.sub_subtasks.length > 0) {
+        return st.sub_subtasks.every(sst => sst.completed);
+      }
+      return st.completed;
+    });
+
+    // If main task was checked but subtasks are no longer all complete, uncheck it
+    if (isChecked && !isNowComplete) {
+      onUncheck(index);
+      prevCompletionRef.current = false;
+    }
+    // Only trigger if this is a NEW completion
+    else if (!prevCompletionRef.current && isNowComplete) {
+      triggerVibration([200, 100, 200]);
+      if (!showFireworks) {
+        setShowFireworks(true);
+      }
+      onCheck(index); // Auto-check the main task
+      prevCompletionRef.current = true;
+    }
   };
 
   // Add sub-subtask
@@ -168,6 +364,39 @@ const ExpandableTask = ({
     setSubtasks(updated);
     onUpdateTask(index, { ...task, text: editedTitle, subtasks: updated });
     setNewSubSubtaskText('');
+  };
+
+  // Handle main task checkbox
+  // Handle main task checkbox
+  const handleMainTaskCheck = () => {
+    if (isChecked) {
+      // Uncheck main task AND uncheck all subtasks
+      const updated = subtasks.map(st => ({ 
+        ...st, 
+        completed: false,
+        sub_subtasks: st.sub_subtasks?.map(sst => ({ ...sst, completed: false }))
+      }));
+      setSubtasks(updated);
+      onUpdateTask(index, { ...task, text: editedTitle, subtasks: updated });
+      onUncheck(index);
+      prevCompletionRef.current = false; // Reset completion tracking
+    } else {
+      const updated = subtasks.map(st => ({ 
+        ...st, 
+        completed: true,
+        sub_subtasks: st.sub_subtasks?.map(sst => ({ ...sst, completed: true }))
+      }));
+      setSubtasks(updated);
+      onUpdateTask(index, { ...task, text: editedTitle, subtasks: updated });
+      onCheck(index);
+      
+      // Only trigger if not already showing fireworks
+      if (!showFireworks) {
+        triggerVibration([200, 100, 200]);
+        setShowFireworks(true);
+      }
+      prevCompletionRef.current = true; // Mark as complete
+    }
   };
 
   const containerStyle = isFullScreen ? {
@@ -204,408 +433,317 @@ const ExpandableTask = ({
   };
 
   return (
-    <div style={containerStyle}>
-      <div style={{ 
-        width: '100%', 
-        maxWidth: isFullScreen ? '800px' : '100%', 
-        display: 'flex', 
-        flexDirection: 'column',
-        gap: isFullScreen ? '12px' : '0' 
-      }}>
-        {/* PROGRESS BAR */}
-        {isFullScreen && (
-          <div style={{ width: '100%', marginBottom: '24px' }}>
-            <div style={{
-              display: 'flex',
-              alignItems: 'baseline',
-              gap: '16px',
-              marginBottom: '12px'
-            }}>
+    <>
+      <Fireworks 
+        isActive={showFireworks} 
+        onComplete={() => setShowFireworks(false)} 
+      />
+      
+      <div style={containerStyle}>
+        <div style={{ 
+          width: '100%', 
+          maxWidth: isFullScreen ? '800px' : '100%', 
+          display: 'flex', 
+          flexDirection: 'column',
+          gap: isFullScreen ? '12px' : '0' 
+        }}>
+          {/* PROGRESS BAR */}
+          {isFullScreen && (
+            <div style={{ width: '100%', marginBottom: '24px' }}>
               <div style={{
-                fontSize: '48px',
-                fontWeight: 'bold',
-                color: '#ffffff',
-                lineHeight: '1',
-                fontFamily: 'Inter, system-ui, -apple-system, BlinkMacSystemFont, sans-serif'
+                display: 'flex',
+                alignItems: 'baseline',
+                gap: '16px',
+                marginBottom: '12px'
               }}>
-                {completionPercentage}%
+                <div style={{
+                  fontSize: '48px',
+                  fontWeight: 'bold',
+                  color: '#ffffff',
+                  lineHeight: '1',
+                  fontFamily: 'Inter, system-ui, -apple-system, BlinkMacSystemFont, sans-serif'
+                }}>
+                  {completionPercentage}%
+                </div>
+                <div style={{
+                  fontSize: '14px',
+                  color: '#9ca3af',
+                  fontWeight: 500
+                }}>
+                  complete
+                </div>
               </div>
-              <div style={{
-                fontSize: '14px',
-                color: '#9ca3af',
-                fontWeight: 500
-              }}>
-                complete
-              </div>
-            </div>
 
-            <div style={{ 
-              width: '100%', 
-              height: '8px', 
-              background: '#1a1a1a', 
-              borderRadius: '12px', 
-              position: 'relative', 
-              overflow: 'hidden',
-              border: '1px solid rgba(255, 255, 255, 0.1)'
-            }}>
               <div style={{ 
-                width: `${completionPercentage}%`, 
-                height: '100%', 
-                background: 'linear-gradient(90deg, #dc2626, #991b1b)',
-                boxShadow: '0 0 12px rgba(220,38,38,0.4)',
-                transition: 'width 0.3s ease' 
-              }} />
-            </div>
-          </div>
-        )}
-
-        {/* HEADER SECTION */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '16px', width: '100%', marginBottom: isFullScreen ? '24px' : '0'}}>
-          <button
-            onClick={() => {
-              if (isChecked) {
-                onUncheck(index);
-              } else {
-                const updated = subtasks.map(st => ({ 
-                  ...st, 
-                  completed: true,
-                  sub_subtasks: st.sub_subtasks?.map(sst => ({ ...sst, completed: true }))
-                }));
-                setSubtasks(updated);
-                onUpdateTask(index, { ...task, text: editedTitle, subtasks: updated });
-                onCheck(index);
-              }
-            }}
-            style={{
-              width: '28px', height: '28px', borderRadius: '8px', flexShrink: 0,
-              backgroundColor: isChecked ? theme.greenSoft : 'transparent',
-              border: isChecked
-                ? `2px solid ${theme.green}`
-                : '2px solid rgba(255,255,255,0.25)',
-              transition: 'all 0.2s ease',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer'
-            }}
-          >
-            {isChecked && <CheckCircle2 size={18} color="#22c55e" />}
-          </button>
-
-          {isEditingTitle ? (
-            <input
-              autoFocus
-              value={editedTitle}
-              onChange={(e) => setEditedTitle(e.target.value)}
-              onBlur={handleTitleSave}
-              onKeyDown={(e) => e.key === 'Enter' && handleTitleSave()}
-              style={{
-                flex: 1, background: 'transparent', border: 'none',
-                borderBottom: '1px solid #dc2626', color: '#fff',
-                fontSize: isFullScreen ? '28px' : '16px',
-                fontWeight: 'bold', outline: 'none'
-              }}
-            />
-          ) : (
-            <div 
-              onClick={() => setIsEditingTitle(true)}
-              style={{ 
-                flex: 1, cursor: 'text',
-                fontSize: isFullScreen ? '28px' : '16px', 
-                fontWeight: 'bold',
-                textDecoration: isChecked ? 'line-through' : 'none',
-                opacity: isChecked ? 0.6 : 1,
-                color: '#fff'
-              }}
-            >
-              {editedTitle}
+                width: '100%', 
+                height: '8px', 
+                background: '#1a1a1a', 
+                borderRadius: '12px', 
+                position: 'relative', 
+                overflow: 'hidden',
+                border: '1px solid rgba(255, 255, 255, 0.1)'
+              }}>
+                <div style={{ 
+                  width: `${completionPercentage}%`, 
+                  height: '100%', 
+                  background: 'linear-gradient(90deg, #dc2626, #991b1b)',
+                  boxShadow: '0 0 12px rgba(220,38,38,0.4)',
+                  transition: 'width 0.3s ease' 
+                }} />
+              </div>
             </div>
           )}
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            {!isFullScreen ? (
-              <button onClick={() => setIsFullScreen(true)} style={{ background: 'none', border: 'none', color: '#6b7280', cursor: 'pointer' }}>
-                <Maximize2 size={20} />
-              </button>
-            ) : (
-              <button onClick={() => setIsFullScreen(false)} style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer' }}>
-                <Minimize2 size={24} />
-              </button>
-            )}
-            
+          {/* HEADER SECTION */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '16px', width: '100%', marginBottom: isFullScreen ? '24px' : '0'}}>
             <button
-              onClick={() => { onDeleteTask(index); if(isFullScreen) setIsFullScreen(false); }}
-              style={{ background: 'transparent', border: 'none', color: '#6b7280', cursor: 'pointer' }}
+              onClick={handleMainTaskCheck}
+              style={{
+                width: '28px', height: '28px', borderRadius: '8px', flexShrink: 0,
+                backgroundColor: isChecked ? theme.greenSoft : 'transparent',
+                border: isChecked
+                  ? `2px solid ${theme.green}`
+                  : '2px solid rgba(255,255,255,0.25)',
+                transition: 'all 0.2s ease',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer'
+              }}
             >
-              <X size={20} />
+              {isChecked && <CheckCircle2 size={18} color="#22c55e" />}
             </button>
+
+            {isEditingTitle ? (
+              <input
+                autoFocus
+                value={editedTitle}
+                onChange={(e) => setEditedTitle(e.target.value)}
+                onBlur={handleTitleSave}
+                onKeyDown={(e) => e.key === 'Enter' && handleTitleSave()}
+                style={{
+                  flex: 1, background: 'transparent', border: 'none',
+                  borderBottom: '1px solid #dc2626', color: '#fff',
+                  fontSize: isFullScreen ? '28px' : '16px',
+                  fontWeight: 'bold', outline: 'none'
+                }}
+              />
+            ) : (
+              <div 
+                onClick={() => setIsEditingTitle(true)}
+                style={{ 
+                  flex: 1, cursor: 'text',
+                  fontSize: isFullScreen ? '28px' : '16px', 
+                  fontWeight: 'bold',
+                  textDecoration: isChecked ? 'line-through' : 'none',
+                  opacity: isChecked ? 0.6 : 1,
+                  color: '#fff'
+                }}
+              >
+                {editedTitle}
+              </div>
+            )}
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              {!isFullScreen ? (
+                <button onClick={() => setIsFullScreen(true)} style={{ background: 'none', border: 'none', color: '#6b7280', cursor: 'pointer' }}>
+                  <Maximize2 size={20} />
+                </button>
+              ) : (
+                <button onClick={() => setIsFullScreen(false)} style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer' }}>
+                  <Minimize2 size={24} />
+                </button>
+              )}
+              
+              <button
+                onClick={() => { onDeleteTask(index); if(isFullScreen) setIsFullScreen(false); }}
+                style={{ background: 'transparent', border: 'none', color: '#6b7280', cursor: 'pointer' }}
+              >
+                <X size={20} />
+              </button>
+            </div>
           </div>
-        </div>
 
-        {/* TIMER */}
-        {isFullScreen && (
-          <div style={{ marginBottom: '28px' }}>
-            <div style={{ 
-              padding: isMobile ? '20px' : '32px', 
-              background: 'linear-gradient(135deg, rgba(220,38,38,0.15), rgba(0,0,0,0.6))',
-              borderRadius: '24px', 
-              border: '1px solid rgba(220,38,38,0.3)', 
-              marginBottom: '4px',
-              width: '100%',
-              boxSizing: 'border-box'
-            }}>
-              <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '20px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <Clock size={24} color="#fca5a5" />
-                  <span style={{
-                    fontSize: '32px',
-                    fontWeight: 'bold',
-                    fontFamily: 'JetBrains Mono, monospace',
-                    letterSpacing: '0.15em',
-                    color: '#fff'
-                  }}>
-                    {formatTime(taskTimer)}
-                  </span>
-                </div>
+          {/* TIMER */}
+          {isFullScreen && (
+            <div style={{ marginBottom: '28px' }}>
+              <div style={{ 
+                padding: isMobile ? '20px' : '32px', 
+                background: 'linear-gradient(135deg, rgba(220,38,38,0.15), rgba(0,0,0,0.6))',
+                borderRadius: '24px', 
+                border: '1px solid rgba(220,38,38,0.3)', 
+                marginBottom: '4px',
+                width: '100%',
+                boxSizing: 'border-box'
+              }}>
+                <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '20px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <Clock size={24} color="#fca5a5" />
+                    <span style={{
+                      fontSize: '32px',
+                      fontWeight: 'bold',
+                      fontFamily: 'JetBrains Mono, monospace',
+                      letterSpacing: '0.15em',
+                      color: '#fff'
+                    }}>
+                      {formatTime(taskTimer)}
+                    </span>
+                  </div>
 
-                <div style={{ display: 'flex', gap: '12px' }}>
-                  {!timerRunning ? (
+                  <div style={{ display: 'flex', gap: '12px' }}>
+                    {!timerRunning ? (
+                      <button
+                        onClick={() => setTimerRunning(true)}
+                        style={{
+                          background: '#22c55e',
+                          border: 'none',
+                          color: '#fff',
+                          width: '56px',
+                          height: '56px',
+                          borderRadius: '12px',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center'
+                        }}
+                      >
+                        <Play size={24} fill="white" />
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => setTimerRunning(false)}
+                        style={{
+                          background: '#eab308',
+                          border: 'none',
+                          color: '#fff',
+                          width: '56px',
+                          height: '56px',
+                          borderRadius: '12px',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center'
+                        }}
+                      >
+                        <Pause size={24} fill="white" />
+                      </button>
+                    )}
+
                     <button
-                      onClick={() => setTimerRunning(true)}
+                      onClick={handleStopAndSave}
+                      disabled={taskTimer === 0}
                       style={{
-                        background: '#22c55e',
+                        background: '#dc2626',
                         border: 'none',
                         color: '#fff',
                         width: '56px',
                         height: '56px',
                         borderRadius: '12px',
-                        cursor: 'pointer',
+                        cursor: taskTimer === 0 ? 'not-allowed' : 'pointer',
+                        opacity: taskTimer === 0 ? 0.5 : 1,
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center'
                       }}
                     >
-                      <Play size={24} fill="white" />
+                      <Square size={24} fill="white" />
                     </button>
-                  ) : (
-                    <button
-                      onClick={() => setTimerRunning(false)}
-                      style={{
-                        background: '#eab308',
-                        border: 'none',
-                        color: '#fff',
-                        width: '56px',
-                        height: '56px',
-                        borderRadius: '12px',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center'
-                      }}
-                    >
-                      <Pause size={24} fill="white" />
-                    </button>
-                  )}
-
-                  <button
-                    onClick={handleStopAndSave}
-                    disabled={taskTimer === 0}
-                    style={{
-                      background: '#dc2626',
-                      border: 'none',
-                      color: '#fff',
-                      width: '56px',
-                      height: '56px',
-                      borderRadius: '12px',
-                      cursor: taskTimer === 0 ? 'not-allowed' : 'pointer',
-                      opacity: taskTimer === 0 ? 0.5 : 1,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center'
-                    }}
-                  >
-                    <Square size={24} fill="white" />
-                  </button>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-        )}
+          )}
 
-        {/* SUBTASKS WITH NESTED SUB-SUBTASKS */}
-        {isFullScreen && (
-          <div style={{ flex: 1 }}>
-            <h3 style={{ color: '#9ca3af', fontSize: '14px', marginBottom: '16px', fontWeight: '600' }}>
-              Subtasks ({completionPercentage}% complete)
-            </h3>
-            
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '24px' }}>
-              {subtasks.map((st, i) => {
-                const hasChildren = st.sub_subtasks && st.sub_subtasks.length > 0;
-                const allChildrenComplete = hasChildren && st.sub_subtasks.every(s => s.completed);
-                
-                return (
-                  <div key={st.id || i} style={{ marginBottom: '8px' }}>
-                    {/* PARENT CARD CONTAINING SUBTASK AND ALL SUB-SUBTASKS */}
-                    <div style={{ 
-                      background: 'rgba(255,255,255,0.04)',
-                      borderRadius: '12px',
-                      border: '1px solid rgba(255,255,255,0.08)',
-                      overflow: 'hidden'
-                    }}>
-                      {/* SUBTASK ROW */}
+          {/* SUBTASKS WITH NESTED SUB-SUBTASKS */}
+          {isFullScreen && (
+            <div style={{ flex: 1 }}>
+              <h3 style={{ color: '#9ca3af', fontSize: '14px', marginBottom: '16px', fontWeight: '600' }}>
+                Subtasks ({completionPercentage}% complete)
+              </h3>
+              
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '24px' }}>
+                {subtasks.map((st, i) => {
+                  const hasChildren = st.sub_subtasks && st.sub_subtasks.length > 0;
+                  const allChildrenComplete = hasChildren && st.sub_subtasks.every(s => s.completed);
+                  
+                  return (
+                    <div key={st.id || i} style={{ marginBottom: '8px' }}>
                       <div style={{ 
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '12px',
-                        padding: '12px 16px',
-                        transition: 'background 0.2s ease'
+                        background: 'rgba(255,255,255,0.04)',
+                        borderRadius: '12px',
+                        border: '1px solid rgba(255,255,255,0.08)',
+                        overflow: 'hidden'
                       }}>
-                        <input 
-                          type="checkbox" 
-                          checked={st.completed || allChildrenComplete} 
-                          onChange={() => toggleSubtask(i)} 
-                          style={{ width: '18px', height: '18px', accentColor: '#22c55e', cursor: 'pointer' }} 
-                        />
-
-                        {editingSubtask === (st.id || i) ? (
-                          <input
-                            autoFocus
-                            value={st.text}
-                            onChange={(e) => handleSubtaskEdit(i, e.target.value)}
-                            onBlur={() => setEditingSubtask(null)}
-                            onKeyDown={(e) => e.key === 'Enter' && setEditingSubtask(null)}
-                            style={{ 
-                              flex: 1, 
-                              background: 'transparent', 
-                              border: 'none', 
-                              borderBottom: '1px solid #6b7280', 
-                              color: '#fff', 
-                              fontSize: '16px', 
-                              outline: 'none' 
-                            }}
-                          />
-                        ) : (
-                          <span 
-                            onClick={() => setEditingSubtask(st.id || i)}
-                            style={{
-                              flex: 1,
-                              fontSize: '16px',
-                              textDecoration: (st.completed || allChildrenComplete) ? 'line-through' : 'none',
-                              opacity: (st.completed || allChildrenComplete) ? 0.5 : 1,
-                              color: '#fff',
-                              cursor: 'text'
-                            }}
-                          >
-                            {st.text}
-                          </span>
-                        )}
-
-                        {/* ADD SUB-SUBTASK BUTTON - ICON ONLY */}
-                        <button
-                          onClick={() => setOpenSubInput(openSubInput === i ? null : i)}
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            background: 'transparent',
-                            border: 'none',
-                            color: '#6b7280',
-                            padding: '4px',
-                            cursor: 'pointer',
-                            transition: 'color 0.2s'
-                          }}
-                          onMouseEnter={(e) => {
-                            e.currentTarget.style.color = '#9ca3af';
-                          }}
-                          onMouseLeave={(e) => {
-                            e.currentTarget.style.color = '#6b7280';
-                          }}
-                        >
-                          {openSubInput === i ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-                        </button>
-
-                        {/* DELETE SUBTASK */}
-                        <button
-                          onClick={() => {
-                            const updated = subtasks.filter((_, idx) => idx !== i);
-                            setSubtasks(updated);
-                            onUpdateTask(index, { ...task, text: editedTitle, subtasks: updated });
-                          }}
-                          style={{
-                            background: 'transparent',
-                            border: 'none',
-                            color: '#6b7280',
-                            cursor: 'pointer',
-                            padding: '4px',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center'
-                          }}
-                        >
-                          <X size={16} />
-                        </button>
-                      </div>
-
-                      {/* RENDER SUB-SUBTASKS (INDENTED WITHIN SAME CARD) - ONLY WHEN DROPDOWN IS OPEN */}
-                      {openSubInput === i && hasChildren && st.sub_subtasks.map((sst, j) => (
-                        <div 
-                          key={sst.id || j} 
-                          style={{ 
-                            marginLeft: '48px',
-                            marginRight: '16px',
-                            marginBottom: j === st.sub_subtasks.length - 1 ? '8px' : '8px',
-                            display: 'flex', 
-                            alignItems: 'center', 
-                            gap: '10px',
-                            padding: '8px 12px',
-                            background: 'transparent',
-                            borderRadius: '8px',
-                            border: '1px solid rgba(255, 255, 255, 0.1)',
-                            borderLeft: '2px solid rgba(255, 255, 255, 0.2)'
-                          }}
-                        >
+                        <div style={{ 
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '12px',
+                          padding: '12px 16px',
+                          transition: 'background 0.2s ease'
+                        }}>
                           <input 
                             type="checkbox" 
-                            checked={sst.completed} 
-                            onChange={() => toggleSubSubtask(i, j)}
-                            style={{ width: '14px', height: '14px', accentColor: '#22c55e', cursor: 'pointer' }}
+                            checked={st.completed || allChildrenComplete} 
+                            onChange={() => toggleSubtask(i)} 
+                            style={{ width: '18px', height: '18px', accentColor: '#22c55e', cursor: 'pointer' }} 
                           />
-                          {editingSubSubtask === (sst.id || `${i}-${j}`) ? (
+
+                          {editingSubtask === (st.id || i) ? (
                             <input
                               autoFocus
-                              value={sst.text}
-                              onChange={(e) => handleSubSubtaskEdit(i, j, e.target.value)}
-                              onBlur={() => setEditingSubSubtask(null)}
-                              onKeyDown={(e) => e.key === 'Enter' && setEditingSubSubtask(null)}
+                              value={st.text}
+                              onChange={(e) => handleSubtaskEdit(i, e.target.value)}
+                              onBlur={() => setEditingSubtask(null)}
+                              onKeyDown={(e) => e.key === 'Enter' && setEditingSubtask(null)}
                               style={{ 
                                 flex: 1, 
                                 background: 'transparent', 
                                 border: 'none', 
-                                borderBottom: '1px solid #4b5563', 
-                                color: '#d1d5db', 
-                                fontSize: '14px', 
+                                borderBottom: '1px solid #6b7280', 
+                                color: '#fff', 
+                                fontSize: '16px', 
                                 outline: 'none' 
                               }}
                             />
                           ) : (
                             <span 
-                              onClick={() => setEditingSubSubtask(sst.id || `${i}-${j}`)}
-                              style={{ 
-                                fontSize: '14px', 
-                                color: '#d1d5db',
+                              onClick={() => setEditingSubtask(st.id || i)}
+                              style={{
                                 flex: 1,
-                                textDecoration: sst.completed ? 'line-through' : 'none',
-                                opacity: sst.completed ? 0.5 : 1,
+                                fontSize: '16px',
+                                textDecoration: (st.completed || allChildrenComplete) ? 'line-through' : 'none',
+                                opacity: (st.completed || allChildrenComplete) ? 0.5 : 1,
+                                color: '#fff',
                                 cursor: 'text'
                               }}
                             >
-                              {sst.text}
+                              {st.text}
                             </span>
                           )}
-                          
-                          {/* DELETE SUB-SUBTASK */}
+
+                          <button
+                            onClick={() => setOpenSubInput(openSubInput === i ? null : i)}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              background: 'transparent',
+                              border: 'none',
+                              color: '#6b7280',
+                              padding: '4px',
+                              cursor: 'pointer',
+                              transition: 'color 0.2s'
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.color = '#9ca3af';
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.color = '#6b7280';
+                            }}
+                          >
+                            {openSubInput === i ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                          </button>
+
                           <button
                             onClick={() => {
-                              const updated = [...subtasks];
-                              updated[i].sub_subtasks = updated[i].sub_subtasks.filter((_, idx) => idx !== j);
+                              const updated = subtasks.filter((_, idx) => idx !== i);
                               setSubtasks(updated);
                               onUpdateTask(index, { ...task, text: editedTitle, subtasks: updated });
                             }}
@@ -614,125 +752,202 @@ const ExpandableTask = ({
                               border: 'none',
                               color: '#6b7280',
                               cursor: 'pointer',
-                              padding: '2px',
+                              padding: '4px',
                               display: 'flex',
                               alignItems: 'center',
                               justifyContent: 'center'
                             }}
                           >
-                            <X size={12} />
+                            <X size={16} />
                           </button>
                         </div>
-                      ))}
 
-                      {/* SUB-SUBTASK INPUT DROPDOWN (INSIDE PARENT CARD) */}
-                      {openSubInput === i && (
-                        <div style={{ 
-                          marginLeft: '44px',
-                          marginRight: '12px',
-                          marginBottom: '12px',
-                          display: 'flex', 
-                          gap: '8px',
-                          padding: '12px',
-                          background: 'transparent',
-                          borderRadius: '8px',
-                          border: '1px solid rgba(255, 255, 255, 0.1)',
-                          borderLeft: '2px solid rgba(255, 255, 255, 0.2)'
-                        }}>
-                          <input 
-                            placeholder="Add sub-subtask..."
-                            value={newSubSubtaskText}
-                            onChange={(e) => setNewSubSubtaskText(e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter' && newSubSubtaskText.trim()) {
-                                addSubSubtask(i, newSubSubtaskText);
-                              }
-                            }}
+                        {openSubInput === i && hasChildren && st.sub_subtasks.map((sst, j) => (
+                          <div 
+                            key={sst.id || j} 
                             style={{ 
-                              background: '#000', 
-                              border: '1px solid rgba(255, 255, 255, 0.1)', 
-                              color: '#fff', 
-                              padding: '8px 12px', 
-                              borderRadius: '6px', 
-                              flex: 1,
-                              fontSize: '14px',
-                              outline: 'none'
-                            }}
-                          />
-                          <button
-                            onClick={() => {
-                              if (newSubSubtaskText.trim()) {
-                                addSubSubtask(i, newSubSubtaskText);
-                              }
-                            }}
-                            style={{
+                              marginLeft: '48px',
+                              marginRight: '16px',
+                              marginBottom: j === st.sub_subtasks.length - 1 ? '8px' : '8px',
+                              display: 'flex', 
+                              alignItems: 'center', 
+                              gap: '10px',
+                              padding: '8px 12px',
                               background: 'transparent',
-                              border: '1px solid rgba(255, 255, 255, 0.2)',
-                              color: '#9ca3af',
-                              padding: '8px 16px',
-                              borderRadius: '6px',
-                              cursor: 'pointer',
-                              fontWeight: '600',
-                              fontSize: '14px',
-                              transition: 'all 0.2s'
-                            }}
-                            onMouseEnter={(e) => {
-                              e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.3)';
-                              e.currentTarget.style.color = '#d1d5db';
-                            }}
-                            onMouseLeave={(e) => {
-                              e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.2)';
-                              e.currentTarget.style.color = '#9ca3af';
+                              borderRadius: '8px',
+                              border: '1px solid rgba(255, 255, 255, 0.1)',
+                              borderLeft: '2px solid rgba(255, 255, 255, 0.2)'
                             }}
                           >
-                            Add
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+                            <input 
+                              type="checkbox" 
+                              checked={sst.completed} 
+                              onChange={() => toggleSubSubtask(i, j)}
+                              style={{ width: '14px', height: '14px', accentColor: '#22c55e', cursor: 'pointer' }}
+                            />
+                            {editingSubSubtask === (sst.id || `${i}-${j}`) ? (
+                              <input
+                                autoFocus
+                                value={sst.text}
+                                onChange={(e) => handleSubSubtaskEdit(i, j, e.target.value)}
+                                onBlur={() => setEditingSubSubtask(null)}
+                                onKeyDown={(e) => e.key === 'Enter' && setEditingSubSubtask(null)}
+                                style={{ 
+                                  flex: 1, 
+                                  background: 'transparent', 
+                                  border: 'none', 
+                                  borderBottom: '1px solid #4b5563', 
+                                  color: '#d1d5db', 
+                                  fontSize: '14px', 
+                                  outline: 'none' 
+                                }}
+                              />
+                            ) : (
+                              <span 
+                                onClick={() => setEditingSubSubtask(sst.id || `${i}-${j}`)}
+                                style={{ 
+                                  fontSize: '14px', 
+                                  color: '#d1d5db',
+                                  flex: 1,
+                                  textDecoration: sst.completed ? 'line-through' : 'none',
+                                  opacity: sst.completed ? 0.5 : 1,
+                                  cursor: 'text'
+                                }}
+                              >
+                                {sst.text}
+                              </span>
+                            )}
+                            
+                            <button
+                              onClick={() => {
+                                const updated = [...subtasks];
+                                updated[i].sub_subtasks = updated[i].sub_subtasks.filter((_, idx) => idx !== j);
+                                setSubtasks(updated);
+                                onUpdateTask(index, { ...task, text: editedTitle, subtasks: updated });
+                              }}
+                              style={{
+                                background: 'transparent',
+                                border: 'none',
+                                color: '#6b7280',
+                                cursor: 'pointer',
+                                padding: '2px',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center'
+                              }}
+                            >
+                              <X size={12} />
+                            </button>
+                          </div>
+                        ))}
 
-            {/* ADD NEW SUBTASK */}
-            <div style={{ display: 'flex', gap: '8px' }}>
-              <input 
-                value={newSubtaskText} 
-                onChange={(e) => setNewSubtaskText(e.target.value)}
-                placeholder="Add a subtask..." 
-                style={{ 
-                  flex: 1, background: '#111', border: '1px solid #333', 
-                  color: '#fff', padding: '12px', borderRadius: '8px', outline: 'none' 
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && newSubtaskText.trim()) {
-                    const updated = [...subtasks, { id: Date.now(), text: newSubtaskText, completed: false, sub_subtasks: [] }];
-                    setSubtasks(updated);
-                    onUpdateTask(index, { ...task, text: editedTitle, subtasks: updated });
-                    setNewSubtaskText('');
-                  }
-                }}
-              />
-              <button 
-                onClick={() => {
-                  if (newSubtaskText.trim()) {
-                    const updated = [...subtasks, { id: Date.now(), text: newSubtaskText, completed: false, sub_subtasks: [] }];
-                    setSubtasks(updated);
-                    onUpdateTask(index, { ...task, text: editedTitle, subtasks: updated });
-                    setNewSubtaskText('');
-                  }
-                }} 
-                style={{ background: '#22c55e', color: '#fff', border: 'none', padding: '0 20px', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}
-              >
-                Add
-              </button>
-            </div>
+                        {openSubInput === i && (
+                          <div style={{ 
+                            marginLeft: '44px',
+                            marginRight: '12px',
+                            marginBottom: '12px',
+                            display: 'flex', 
+                            gap: '8px',
+                            padding: '12px',
+                        background: 'transparent',
+                        borderRadius: '8px',
+                        border: '1px solid rgba(255, 255, 255, 0.1)',
+                        borderLeft: '2px solid rgba(255, 255, 255, 0.2)'
+                      }}>
+                        <input 
+                          placeholder="Add sub-subtask..."
+                          value={newSubSubtaskText}
+                          onChange={(e) => setNewSubSubtaskText(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' && newSubSubtaskText.trim()) {
+                              addSubSubtask(i, newSubSubtaskText);
+                            }
+                          }}
+                          style={{ 
+                            background: '#000', 
+                            border: '1px solid rgba(255, 255, 255, 0.1)', 
+                            color: '#fff', 
+                            padding: '8px 12px', 
+                            borderRadius: '6px', 
+                            flex: 1,
+                            fontSize: '14px',
+                            outline: 'none'
+                          }}
+                        />
+                        <button
+                          onClick={() => {
+                            if (newSubSubtaskText.trim()) {
+                              addSubSubtask(i, newSubSubtaskText);
+                            }
+                          }}
+                          style={{
+                            background: 'transparent',
+                            border: '1px solid rgba(255, 255, 255, 0.2)',
+                            color: '#9ca3af',
+                            padding: '8px 16px',
+                            borderRadius: '6px',
+                            cursor: 'pointer',
+                            fontWeight: '600',
+                            fontSize: '14px',
+                            transition: 'all 0.2s'
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.3)';
+                            e.currentTarget.style.color = '#d1d5db';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.2)';
+                            e.currentTarget.style.color = '#9ca3af';
+                          }}
+                        >
+                          Add
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
           </div>
-        )}
-      </div>
+
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <input 
+              value={newSubtaskText} 
+              onChange={(e) => setNewSubtaskText(e.target.value)}
+              placeholder="Add a subtask..." 
+              style={{ 
+                flex: 1, background: '#111', border: '1px solid #333', 
+                color: '#fff', padding: '12px', borderRadius: '8px', outline: 'none' 
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && newSubtaskText.trim()) {
+                  const updated = [...subtasks, { id: Date.now(), text: newSubtaskText, completed: false, sub_subtasks: [] }];
+                  setSubtasks(updated);
+                  onUpdateTask(index, { ...task, text: editedTitle, subtasks: updated });
+                  setNewSubtaskText('');
+                }
+              }}
+            />
+            <button 
+              onClick={() => {
+                if (newSubtaskText.trim()) {
+                  const updated = [...subtasks, { id: Date.now(), text: newSubtaskText, completed: false, sub_subtasks: [] }];
+                  setSubtasks(updated);
+                  onUpdateTask(index, { ...task, text: editedTitle, subtasks: updated });
+                  setNewSubtaskText('');
+                }
+              }} 
+              style={{ background: '#22c55e', color: '#fff', border: 'none', padding: '0 20px', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer' }}
+            >
+              Add
+            </button>
+          </div>
+        </div>
+      )}
     </div>
-  );
+  </div>
+</>
+);
 };
 
 export default ExpandableTask;
