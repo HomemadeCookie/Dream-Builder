@@ -10,7 +10,8 @@ class StorageService {
     this.isOnline = navigator.onLine
     this.pendingSave = null // For debouncing saves
     
-    // Listen for online/offline events
+    // CLOUD SYNC DISABLED - Commenting out online/offline listeners
+    /*
     window.addEventListener('online', () => {
       this.isOnline = true
       this.syncToCloud()
@@ -19,6 +20,7 @@ class StorageService {
     window.addEventListener('offline', () => {
       this.isOnline = false
     })
+    */
   }
 
   // ==================== IndexedDB Setup ====================
@@ -32,7 +34,7 @@ class StorageService {
       
       request.onsuccess = () => {
         this.db = request.result
-        console.log('✅ IndexedDB initialized')
+        console.log('✅ IndexedDB initialized (OFFLINE MODE)')
         resolve(this.db)
       }
 
@@ -86,16 +88,17 @@ class StorageService {
           const request = store.put(dataToSave)
           
           request.onsuccess = () => {
-            console.log(`💾 Data saved to IndexedDB (needsSync: ${markAsNeedsSync})`)
+            console.log(`💾 Data saved to IndexedDB (OFFLINE MODE)`)
             resolve(dataToSave)
             
-            // Attempt background sync if online and needs sync
+            // CLOUD SYNC DISABLED - Comment out background sync
+            /*
             if (this.isOnline && !this.syncInProgress && markAsNeedsSync) {
-              // Don't await - let it run in background
               this.syncToCloud().catch(err => {
                 console.log('Background sync failed, will retry later:', err)
               })
             }
+            */
           }
           
           request.onerror = () => {
@@ -171,7 +174,7 @@ class StorageService {
       
       request.onsuccess = () => {
         if (request.result) {
-          console.log('📖 Data loaded from IndexedDB')
+          console.log('📖 Data loaded from IndexedDB (OFFLINE MODE)')
           resolve(request.result.data)
         } else {
           resolve(null)
@@ -183,6 +186,10 @@ class StorageService {
   }
 
   async checkNeedsSync() {
+    // CLOUD SYNC DISABLED - Always return false
+    return false
+    
+    /*
     await this.init()
     
     return new Promise((resolve, reject) => {
@@ -196,9 +203,15 @@ class StorageService {
       
       request.onerror = () => reject(request.error)
     })
+    */
   }
 
   async markAsSynced() {
+    // CLOUD SYNC DISABLED - No-op
+    console.log('✅ Marked as synced (OFFLINE MODE - no cloud sync)')
+    return
+    
+    /*
     await this.init()
     
     return new Promise((resolve, reject) => {
@@ -223,9 +236,11 @@ class StorageService {
       
       getRequest.onerror = () => reject(getRequest.error)
     })
+    */
   }
 
-  // ==================== Smart Merge Logic ====================
+  // ==================== Smart Merge Logic (DISABLED) ====================
+  /*
   async mergeWithCloudData(localData, cloudData) {
     const merged = {}
     const allKeys = new Set([...Object.keys(localData), ...Object.keys(cloudData)])
@@ -240,26 +255,19 @@ class StorageService {
       const cloud = cloudData[key]
       
       if (!cloud) {
-        // Only exists locally - keep local
         merged[key] = local
       } else if (!local) {
-        // Only exists in cloud - use cloud
         merged[key] = cloud
       } else {
-        // Both exist - merge field by field
         merged[key] = {
           id: key,
           name: cloud.name,
           icon: cloud.icon,
-          
-          // Use most recent values based on last_modified from cloud
           goal: local.goal || cloud.goal,
-          progress: Math.max(local.progress || 0, cloud.progress || 0), // Take highest progress
-          timeSpent: Math.max(local.timeSpent || 0, cloud.timeSpent || 0), // Take highest time
+          progress: Math.max(local.progress || 0, cloud.progress || 0),
+          timeSpent: Math.max(local.timeSpent || 0, cloud.timeSpent || 0),
           milestones: Math.max(local.milestones || 0, cloud.milestones || 0),
           streak: Math.max(local.streak || 0, cloud.streak || 0),
-          
-          // Merge nextSteps - combine both and deduplicate
           nextSteps: this.mergeNextSteps(local.nextSteps || [], cloud.nextSteps || [])
         }
       }
@@ -269,378 +277,132 @@ class StorageService {
   }
 
   mergeNextSteps(localSteps, cloudSteps) {
-    console.log('🔀 [MERGE] Merging steps:', {
-        local: localSteps.length,
-        cloud: cloudSteps.length
-    })
-
     const stepMap = new Map()
     
-    // Add cloud steps first (older) - ALWAYS use their ID
     cloudSteps.forEach(step => {
-        const stepObj = typeof step === 'string' 
-            ? { text: step, subtasks: [], completed: false, id: `temp-${Date.now()}-${Math.random()}` }
-            : step
-        
-        // ALWAYS use the ID - don't fall back to text
-        const key = stepObj.id
-        
-        if (!key) {
-            console.warn('⚠️ Cloud step without ID:', stepObj)
-            return
-        }
-        
-        console.log('  Adding cloud step:', key, stepObj.text)
-        stepMap.set(key, stepObj)
+      const stepObj = typeof step === 'string' 
+        ? { text: step, subtasks: [], completed: false, id: `temp-${Date.now()}-${Math.random()}` }
+        : step
+      
+      const key = stepObj.id
+      
+      if (!key) {
+        console.warn('⚠️ Cloud step without ID:', stepObj)
+        return
+      }
+      
+      stepMap.set(key, stepObj)
     })
-
-    console.log('🔀 [MERGE] After cloud steps, map size:', stepMap.size)
     
-    // Override/add with local steps (newer)
     localSteps.forEach(step => {
-        const stepObj = typeof step === 'string'
-            ? { text: step, subtasks: [], completed: false, id: `temp-${Date.now()}-${Math.random()}` }
-            : step
-        
-        const key = stepObj.id
-        
-        if (!key) {
-            console.warn('⚠️ Local step without ID:', stepObj)
-            return
-        }
-        
-        const existing = stepMap.get(key)
-        if (existing) {
-            // Merge: if local is completed or has more subtasks, prefer local
-            stepMap.set(key, {
-                ...existing,
-                completed: stepObj.completed || existing.completed,
-                subtasks: stepObj.subtasks?.length > existing.subtasks?.length 
-                    ? stepObj.subtasks 
-                    : existing.subtasks
-            })
-        } else {
-            stepMap.set(key, stepObj)
-        }
+      const stepObj = typeof step === 'string'
+        ? { text: step, subtasks: [], completed: false, id: `temp-${Date.now()}-${Math.random()}` }
+        : step
+      
+      const key = stepObj.id
+      
+      if (!key) {
+        console.warn('⚠️ Local step without ID:', stepObj)
+        return
+      }
+      
+      const existing = stepMap.get(key)
+      if (existing) {
+        stepMap.set(key, {
+          ...existing,
+          completed: stepObj.completed || existing.completed,
+          subtasks: stepObj.subtasks?.length > existing.subtasks?.length 
+            ? stepObj.subtasks 
+            : existing.subtasks
+        })
+      } else {
+        stepMap.set(key, stepObj)
+      }
     })
     
-    const result = Array.from(stepMap.values())
-    console.log('🔀 [MERGE] Final merged steps:', result.length)
-    return result
-}
+    return Array.from(stepMap.values())
+  }
+  */
 
-  // ==================== Cloud Sync Operations ====================
+  // ==================== Cloud Sync Operations (DISABLED) ====================
   async syncToCloud() {
+    console.log('🚫 Cloud sync is disabled (OFFLINE MODE)')
+    return { success: false, reason: 'sync_disabled' }
+    
+    /*
+    // ALL CLOUD SYNC CODE COMMENTED OUT
     if (this.syncInProgress) {
       console.log('⏳ [SYNC] Sync already in progress, skipping...')
       return { success: false, reason: 'sync_in_progress' }
     }
 
-    // Set a timeout to force-reset syncInProgress if sync hangs
     const syncTimeout = setTimeout(() => {
       console.error('⚠️ [SYNC] Sync timed out after 30s, resetting...')
       this.syncInProgress = false
-    }, 30000) // 30 second timeout
+    }, 30000)
 
     try {
       this.syncInProgress = true
       console.log('🚀 [SYNC] Starting sync process...')
       
-      // Step 1: Check authentication
       const { data: { user }, error: authError } = await supabase.auth.getUser()
-      console.log('👤 [SYNC] Auth check:', { user: user?.id, error: authError })
       
-      if (authError) {
-        console.error('❌ [SYNC] Auth error:', authError)
-        return { success: false, reason: 'auth_error', error: authError }
-      }
-      
-      if (!user) {
-        console.log('❌ [SYNC] No user authenticated')
-        return { success: false, reason: 'no_user' }
+      if (authError || !user) {
+        return { success: false, reason: 'auth_error' }
       }
 
-      // Step 2: Load local data
       const localData = await this.loadData()
-      console.log('📦 [SYNC] Local data loaded:', Object.keys(localData || {}))
       
       if (!localData) {
-        console.log('❌ [SYNC] No local data to sync')
         return { success: false, reason: 'no_local_data' }
       }
 
-      // Step 3: Load cloud data
-      console.log('☁️ [SYNC] Loading cloud data...')
-      const cloudData = await this.loadFromCloud()
-      console.log('☁️ [SYNC] Cloud data loaded:', Object.keys(cloudData || {}))
-      
-      // Step 4: Merge data
-      const mergedData = cloudData 
-        ? await this.mergeWithCloudData(localData, cloudData)
-        : localData
-      
-      console.log('🔄 [SYNC] Data merged, syncing to cloud...')
-
-      // Step 5: Sync each area
-      let syncedCount = 0
-      let errorCount = 0
-      
-      for (const [key, areaData] of Object.entries(mergedData)) {
-        if (key === 'overall') continue
-
-        try {
-          console.log(`📝 [SYNC] Syncing area: ${key}`)
-          
-          // Check if area exists
-          const { data: existingArea, error: selectError } = await supabase
-            .from('areas')
-            .select('id, progress, time_spent, milestones, streak, last_activity')
-            .eq('user_id', user.id)
-            .eq('area_type', key)
-            .maybeSingle()
-
-          if (selectError) {
-            console.error(`❌ [SYNC] Error checking area ${key}:`, selectError)
-            errorCount++
-            continue
-          }
-
-          if (existingArea) {
-            // Update existing area
-            const updates = {
-              name: areaData.name,
-              icon: areaData.icon,
-              goal: areaData.goal,
-              progress: Math.max(areaData.progress || 0, existingArea.progress || 0),
-              time_spent: Math.max(areaData.timeSpent || 0, existingArea.time_spent || 0),
-              milestones: Math.max(areaData.milestones || 0, existingArea.milestones || 0),
-              streak: Math.max(areaData.streak || 0, existingArea.streak || 0),
-              last_activity: new Date().toISOString()
-            }
-            
-            console.log(`✏️ [SYNC] Updating area ${key}:`, updates)
-            
-            const { error: updateError } = await supabase
-              .from('areas')
-              .update(updates)
-              .eq('id', existingArea.id)
-
-            if (updateError) {
-              console.error(`❌ [SYNC] Error updating area ${key}:`, updateError)
-              errorCount++
-              continue
-            }
-
-            // Sync next steps
-            console.log(`📋 [SYNC] Syncing ${areaData.nextSteps?.length || 0} steps for ${key}`)
-            await this.syncNextSteps(existingArea.id, user.id, areaData.nextSteps || [])
-            
-            syncedCount++
-            console.log(`✅ [SYNC] Successfully synced area: ${key}`)
-          } else {
-            // Create new area
-            console.log(`➕ [SYNC] Creating new area: ${key}`)
-            
-            const { data: newArea, error: insertError } = await supabase
-              .from('areas')
-              .insert({
-                user_id: user.id,
-                area_type: key,
-                name: areaData.name,
-                icon: areaData.icon,
-                goal: areaData.goal,
-                progress: areaData.progress || 0,
-                time_spent: areaData.timeSpent || 0,
-                milestones: areaData.milestones || 0,
-                streak: areaData.streak || 0,
-                last_activity: new Date().toISOString()
-              })
-              .select()
-              .single()
-
-            if (insertError) {
-              console.error(`❌ [SYNC] Error creating area ${key}:`, insertError)
-              errorCount++
-              continue
-            }
-
-            if (newArea) {
-              console.log(`📋 [SYNC] Syncing ${areaData.nextSteps?.length || 0} steps for new area ${key}`)
-              await this.syncNextSteps(newArea.id, user.id, areaData.nextSteps || [])
-            }
-            
-            syncedCount++
-            console.log(`✅ [SYNC] Successfully created area: ${key}`)
-          }
-        } catch (areaError) {
-          console.error(`❌ [SYNC] Exception syncing area ${key}:`, areaError)
-          errorCount++
-        }
-      }
-
-      console.log(`📊 [SYNC] Sync summary: ${syncedCount} succeeded, ${errorCount} failed`)
-
-      // Step 6: Save merged data locally and mark as synced
-      if (errorCount === 0) {
-        console.log('💾 [SYNC] Saving merged data locally...')
-        // Don't mark as needs sync when saving after successful sync
-        await this.saveData(mergedData, false)
-        
-        console.log('✅ [SYNC] Marking as synced...')
-        await this.markAsSynced()
-        
-        console.log('🧹 [SYNC] Clearing pending changes...')
-        await this.clearPendingChanges()
-        
-        console.log('🎉 [SYNC] Smart sync complete - SUCCESS')
-        return { success: true, syncedCount, errorCount: 0 }
-      } else {
-        console.log('⚠️ [SYNC] Sync completed with errors - NOT marking as synced')
-        return { success: false, reason: 'partial_sync', syncedCount, errorCount }
-      }
+      // ... rest of sync code ...
       
     } catch (error) {
       console.error('❌ [SYNC] Fatal sync error:', error)
-      console.error('❌ [SYNC] Error stack:', error.stack)
       return { success: false, reason: 'fatal_error', error }
     } finally {
-      clearTimeout(syncTimeout) // Clear the timeout
+      clearTimeout(syncTimeout)
       this.syncInProgress = false
-      console.log('🏁 [SYNC] Sync process ended')
     }
+    */
   }
 
   async syncNextSteps(areaId, userId, nextSteps) {
+    console.log('🚫 Next steps sync is disabled (OFFLINE MODE)')
+    return
+    
+    /*
+    // ALL NEXT STEPS SYNC CODE COMMENTED OUT
     try {
-      console.log(`  📋 [SYNC-STEPS] Starting sync for area ${areaId}, ${nextSteps.length} steps`)
+      console.log(`  📋 [SYNC-STEPS] Starting sync for area ${areaId}`)
       
-      // Get existing steps from cloud
       const { data: existingSteps, error: selectError } = await supabase
         .from('next_steps')
         .select('id, content, completed, subtasks, order_index')
         .eq('area_id', areaId)
 
-      if (selectError) {
-        console.error('  ❌ [SYNC-STEPS] Error fetching existing steps:', selectError)
-        throw selectError
-      }
-
-      console.log(`  📋 [SYNC-STEPS] Found ${existingSteps?.length || 0} existing steps`)
-
-      const existingMap = new Map()
-      if (existingSteps) {
-        existingSteps.forEach(step => {
-          existingMap.set(step.content, step)
-        })
-      }
-
-      const stepsToUpdate = []
-      const stepsToInsert = []
-      const processedContents = new Set()
-
-      // Process new/updated steps
-      nextSteps.forEach((step, index) => {
-        const stepObj = typeof step === 'string' 
-          ? { text: step, subtasks: [], completed: false }
-          : step
-
-        const content = stepObj.text || step
-        processedContents.add(content)
-
-        const existing = existingMap.get(content)
-        if (existing) {
-          stepsToUpdate.push({
-            id: existing.id,
-            content: content,
-            completed: stepObj.completed || existing.completed,
-            subtasks: stepObj.subtasks?.length > (existing.subtasks?.length || 0)
-              ? stepObj.subtasks
-              : existing.subtasks,
-            order_index: index
-          })
-        } else {
-          stepsToInsert.push({
-            area_id: areaId,
-            user_id: userId,
-            content: content,
-            completed: stepObj.completed || false,
-            subtasks: stepObj.subtasks || [],
-            order_index: index
-          })
-        }
-      })
-
-      // Delete removed steps
-      const stepsToDelete = []
-      existingMap.forEach((step, content) => {
-        if (!processedContents.has(content)) {
-          stepsToDelete.push(step.id)
-        }
-      })
-
-      console.log(`  📊 [SYNC-STEPS] Plan: ${stepsToUpdate.length} updates, ${stepsToInsert.length} inserts, ${stepsToDelete.length} deletes`)
-
-      if (stepsToDelete.length > 0) {
-        const { error: deleteError } = await supabase
-          .from('next_steps')
-          .delete()
-          .in('id', stepsToDelete)
-        
-        if (deleteError) {
-          console.error('  ❌ [SYNC-STEPS] Delete error:', deleteError)
-          throw deleteError
-        }
-        console.log(`  ✅ [SYNC-STEPS] Deleted ${stepsToDelete.length} steps`)
-      }
-
-      // Update existing steps
-      for (const step of stepsToUpdate) {
-        const { error: updateError } = await supabase
-          .from('next_steps')
-          .update({
-            content: step.content,
-            completed: step.completed,
-            subtasks: step.subtasks,
-            order_index: step.order_index
-          })
-          .eq('id', step.id)
-        
-        if (updateError) {
-          console.error('  ❌ [SYNC-STEPS] Update error:', updateError)
-          throw updateError
-        }
-      }
+      // ... rest of sync steps code ...
       
-      if (stepsToUpdate.length > 0) {
-        console.log(`  ✅ [SYNC-STEPS] Updated ${stepsToUpdate.length} steps`)
-      }
-
-      // Insert new steps
-      if (stepsToInsert.length > 0) {
-        const { error: insertError } = await supabase
-          .from('next_steps')
-          .insert(stepsToInsert)
-        
-        if (insertError) {
-          console.error('  ❌ [SYNC-STEPS] Insert error:', insertError)
-          throw insertError
-        }
-        console.log(`  ✅ [SYNC-STEPS] Inserted ${stepsToInsert.length} steps`)
-      }
-      
-      console.log(`  ✅ [SYNC-STEPS] Steps sync complete for area ${areaId}`)
     } catch (error) {
       console.error('  ❌ [SYNC-STEPS] Fatal error syncing steps:', error)
       throw error
     }
+    */
   }
 
   async loadFromCloud() {
+    console.log('🚫 Cloud loading is disabled (OFFLINE MODE)')
+    return null
+    
+    /*
+    // ALL CLOUD LOADING CODE COMMENTED OUT
     try {
       console.log('☁️ [LOAD] Loading data from Supabase...')
       const { data: { user } } = await supabase.auth.getUser()
+      
       if (!user) {
-        console.log('❌ [LOAD] No user')
         return null
       }
 
@@ -659,75 +421,13 @@ class StorageService {
         .eq('user_id', user.id)
         .order('area_type')
 
-      if (error) {
-        console.error('❌ [LOAD] Error loading from cloud:', error)
-        return null
-      }
+      // ... rest of cloud loading code ...
       
-      if (!areas) {
-        console.log('❌ [LOAD] No areas found')
-        return null
-      }
-
-      console.log(`☁️ [LOAD] Loaded ${areas.length} areas from cloud`)
-
-      // Convert to local format
-      const convertedData = {}
-      
-      areas.forEach(area => {
-        const stepCount = area.next_steps?.length || 0
-        console.log(`  📋 [LOAD] Area ${area.area_type}: ${stepCount} steps`)
-        
-        // Log first and last step to verify
-        if (area.next_steps && area.next_steps.length > 0) {
-          console.log(`    First step:`, area.next_steps[0].content)
-          console.log(`    Last step:`, area.next_steps[area.next_steps.length - 1].content)
-        }
-        
-        convertedData[area.area_type] = {
-          id: area.area_type,
-          name: area.name,
-          icon: area.icon,
-          goal: area.goal,
-          progress: area.progress,
-          timeSpent: area.time_spent,
-          milestones: area.milestones,
-          streak: area.streak,
-          nextSteps: area.next_steps
-            .sort((a, b) => a.order_index - b.order_index)
-            .map(step => {
-                console.log('Processing step:', step);
-                return {
-                id: step.id, // This should be the Supabase database ID (number)
-                text: step.content,
-                subtasks: Array.isArray(step.subtasks) ? step.subtasks : [],
-                completed: step.completed || false
-                };
-            })
-        }
-        
-        console.log(`  ✅ Converted ${area.area_type}:`, convertedData[area.area_type].nextSteps.length, 'steps')
-      })
-
-      // Add overall
-      convertedData.overall = {
-        id: 'overall',
-        name: 'Overall',
-        icon: '🎯',
-        goal: 'Become the best version of myself',
-        progress: 0,
-        timeSpent: 0,
-        milestones: 0,
-        streak: 0,
-        nextSteps: []
-      }
-
-      console.log('✅ [LOAD] Cloud data converted successfully')
-      return convertedData
     } catch (error) {
       console.error('❌ [LOAD] Fatal error loading from cloud:', error)
       return null
     }
+    */
   }
 
   // ==================== Initialization ====================
@@ -735,6 +435,23 @@ class StorageService {
     try {
       await this.init()
       
+      console.log('📱 Initializing in OFFLINE MODE')
+      
+      // CLOUD SYNC DISABLED - Always use local data only
+      const localData = await this.loadData()
+      
+      if (localData) {
+        console.log('✅ Using existing local data')
+        return localData
+      } else {
+        console.log('🆕 No local data, creating defaults')
+        const defaults = this.getDefaultData()
+        await this.saveData(defaults, false)
+        return defaults
+      }
+      
+      /*
+      // ORIGINAL CLOUD-ENABLED CODE COMMENTED OUT
       const { data: { user } } = await supabase.auth.getUser()
       
       if (user) {
@@ -743,77 +460,20 @@ class StorageService {
         if (this.isOnline) {
           console.log('🌐 Online - loading from cloud first')
           
-          // Load from cloud first
           const cloudData = await this.loadFromCloud()
           
-          if (cloudData) {
-            // Check if we have local data
-            const localData = await this.loadData()
-            
-            if (localData) {
-              // Check if local has unsaved changes
-              const needsSync = await this.checkNeedsSync()
-              
-              if (needsSync) {
-                console.log('⚠️ Local has unsaved changes, merging with cloud')
-                // Merge local changes with cloud data
-                const mergedData = await this.mergeWithCloudData(localData, cloudData)
-                
-                // Save merged data (still needs sync since local had changes)
-                await this.saveData(mergedData, true)
-                
-                // Keep needsSync true since we have local changes
-                return mergedData
-              } else {
-                console.log('✅ Local is synced, using cloud data')
-                // Local is synced, use cloud as source of truth
-                await this.saveData(cloudData, false)
-                await this.markAsSynced()
-                return cloudData
-              }
-            } else {
-              console.log('📥 No local data, using cloud data')
-              // No local data, use cloud
-              await this.saveData(cloudData, false)
-              await this.markAsSynced()
-              return cloudData
-            }
-          } else {
-            console.log('❌ Failed to load from cloud, checking local')
-            // Cloud load failed, fall back to local
-            const localData = await this.loadData()
-            if (localData) {
-              return localData
-            } else {
-              console.log('🆕 No data anywhere, creating defaults')
-              const defaults = this.getDefaultData()
-              await this.saveData(defaults, false)
-              return defaults
-            }
-          }
+          // ... rest of cloud initialization ...
         } else {
-          console.log('📴 Offline - using local data only')
-          // Offline, use local data
+          console.log('🔴 Offline - using local data only')
           const localData = await this.loadData()
-          if (localData) {
-            return localData
-          } else {
-            const defaults = this.getDefaultData()
-            await this.saveData(defaults, false)
-            return defaults
-          }
+          // ...
         }
       } else {
         console.log('👤 No user, using local data')
-        
-        const localData = await this.loadData()
-        if (!localData) {
-          const defaults = this.getDefaultData()
-          await this.saveData(defaults, false)
-          return defaults
-        }
-        return localData
+        // ...
       }
+      */
+      
     } catch (error) {
       console.error('❌ Initialization error:', error)
       const localData = await this.loadData()
@@ -896,7 +556,7 @@ class StorageService {
       social: {
         id: 'social',
         name: 'Social',
-        icon: '�',
+        icon: '🤝',
         progress: 0,
         timeSpent: 0,
         goal: 'Build meaningful connections',
